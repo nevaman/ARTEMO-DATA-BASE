@@ -15,7 +15,7 @@ VALUES ('knowledge-base', 'knowledge-base', false, 26214400, ARRAY['application/
 ON CONFLICT (id) DO NOTHING;
 
 COMMENT ON TABLE storage.buckets IS 'Defines the storage buckets for the application.';
-
+ 
 -- Section: Storage Row Level Security Policies
 -- These policies control who can access the actual files within the "knowledge-base" bucket.
 
