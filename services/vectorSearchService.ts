@@ -143,7 +143,7 @@ export class VectorSearchService {
    * Find similar tools using vector search
    */
   async findSimilarTools(
-    userQuery: string, 
+    userQuery: string,
     maxResults: number = 5,
     similarityThreshold: number = 0.6
   ): Promise<ApiResponse<SimilarTool[]>> {
@@ -152,12 +152,32 @@ export class VectorSearchService {
     }
 
     try {
+      Logger.info('Starting vector search for similar tools', {
+        component: 'VectorSearchService',
+        method: 'findSimilarTools',
+        queryLength: userQuery.length,
+        maxResults,
+        similarityThreshold,
+      });
+
       // Generate embedding for user query
+      Logger.info('Invoking generate-embeddings edge function', {
+        component: 'VectorSearchService',
+        action: 'generate_query_embedding',
+        queryPreview: userQuery.substring(0, 100),
+      });
+
       const response = await supabase.functions.invoke('generate-embeddings', {
         body: {
           action: 'generate_query_embedding',
           text: userQuery
         }
+      });
+
+      Logger.info('Received response from generate-embeddings edge function', {
+        component: 'VectorSearchService',
+        hasError: !!response.error,
+        hasData: !!response.data,
       });
 
       // Check if the response itself failed
@@ -175,6 +195,13 @@ export class VectorSearchService {
       }
 
       const queryResult = response.data;
+
+      Logger.info('Parsing query result from edge function', {
+        component: 'VectorSearchService',
+        success: queryResult?.success,
+        hasSimilarTools: !!queryResult?.similarTools,
+        similarToolsCount: queryResult?.similarTools?.length || 0,
+      });
       
       if (!queryResult?.success) {
         Logger.error({
@@ -191,11 +218,15 @@ export class VectorSearchService {
 
       const similarTools = queryResult.similarTools || [];
 
-      Logger.info('Vector search completed', {
+      Logger.info('Vector search completed successfully', {
         component: 'VectorSearchService',
         queryLength: userQuery.length,
         resultsFound: similarTools.length,
         threshold: similarityThreshold,
+        topResults: similarTools.slice(0, 3).map((t: SimilarTool) => ({
+          title: t.title,
+          similarity: t.similarity_score,
+        })),
       });
 
       return { success: true, data: similarTools };
@@ -219,10 +250,34 @@ export class VectorSearchService {
     }
 
     try {
+      Logger.info('Starting optimized tool recommendation process', {
+        component: 'VectorSearchService',
+        method: 'getOptimizedToolRecommendation',
+        queryLength: userQuery.length,
+        queryPreview: userQuery.substring(0, 100),
+      });
+
       // Step 1: Use vector search to find similar tools
       const similarToolsResponse = await this.findSimilarTools(userQuery, 5, 0.6);
+
+      Logger.info('Received response from findSimilarTools', {
+        component: 'VectorSearchService',
+        success: similarToolsResponse.success,
+        dataLength: similarToolsResponse.data?.length || 0,
+        hasError: !!similarToolsResponse.error,
+      });
       
       if (!similarToolsResponse.success) {
+        Logger.error({
+          message: 'Vector search failed, returning fallback response',
+          code: 'VECTOR_SEARCH_FAILED',
+          details: similarToolsResponse.error || 'Unknown error',
+          timestamp: new Date().toISOString(),
+          correlationId: Logger.getCorrelationId(),
+          component: 'VectorSearchService',
+          severity: 'warning',
+        });
+
         // If vector search fails, return graceful fallback
         return {
           success: true,
@@ -237,7 +292,23 @@ export class VectorSearchService {
 
       const similarTools = similarToolsResponse.data;
 
+      Logger.info('Similar tools retrieved successfully', {
+        component: 'VectorSearchService',
+        toolsCount: similarTools.length,
+        tools: similarTools.map(t => ({
+          id: t.tool_id,
+          title: t.title,
+          category: t.category_name,
+          similarity: t.similarity_score,
+        })),
+      });
+
       if (similarTools.length === 0) {
+        Logger.info('No similar tools found for query', {
+          component: 'VectorSearchService',
+          queryLength: userQuery.length,
+        });
+
         return {
           success: true,
           data: {
@@ -253,7 +324,7 @@ export class VectorSearchService {
       const optimizedPrompt = `You are an AI assistant that analyzes user requests and recommends the most appropriate copywriting tool from a curated list of relevant tools.
 
 Relevant tools (pre-filtered using semantic similarity):
-${similarTools.map(tool => 
+${similarTools.map(tool =>
   `- **${tool.title}** (${tool.category_name}): ${tool.description} [Similarity: ${(tool.similarity_score * 100).toFixed(1)}%]`
 ).join('\n')}
 
@@ -268,7 +339,18 @@ Respond in this format:
 RECOMMENDED_TOOL: [exact tool title from the list]
 ANALYSIS: [detailed analysis explaining why this tool matches their needs and how it will help them achieve their content goals]`;
 
+      Logger.info('Created optimized prompt for AI', {
+        component: 'VectorSearchService',
+        promptLength: optimizedPrompt.length,
+        includedToolsCount: similarTools.length,
+      });
+
       // Step 3: Send optimized prompt to AI
+      Logger.info('Invoking ai-chat edge function', {
+        component: 'VectorSearchService',
+        toolId: 'tool-recommendation-optimized',
+      });
+
       const { data: aiResponse, error: aiError } = await supabase.functions.invoke('ai-chat', {
         body: {
           toolId: 'tool-recommendation-optimized',
@@ -277,15 +359,34 @@ ANALYSIS: [detailed analysis explaining why this tool matches their needs and ho
         }
       });
 
+      Logger.info('Received response from ai-chat edge function', {
+        component: 'VectorSearchService',
+        hasError: !!aiError,
+        hasResponse: !!aiResponse?.response,
+        responseLength: aiResponse?.response?.length || 0,
+      });
+
       if (aiError || !aiResponse?.response) {
-        Logger.warn('AI service unavailable, falling back to basic recommendation', Logger.getCorrelationId(), {
-          aiError: aiError?.message,
-          hasResponse: !!aiResponse?.response
+        Logger.error({
+          message: 'AI service unavailable, falling back to basic recommendation',
+          code: 'AI_SERVICE_ERROR',
+          details: aiError?.message || 'No response from AI',
+          timestamp: new Date().toISOString(),
+          correlationId: Logger.getCorrelationId(),
+          component: 'VectorSearchService',
+          severity: 'warning',
         });
         
         // Return the top similar tool as fallback
         if (similarTools.length > 0) {
           const topTool = similarTools[0];
+
+          Logger.info('Using fallback: fetching top similar tool from database', {
+            component: 'VectorSearchService',
+            toolId: topTool.tool_id,
+            toolTitle: topTool.title,
+          });
+
           const { data: fullTool, error: toolError } = await supabase
             .from('tools')
             .select(`
@@ -295,6 +396,13 @@ ANALYSIS: [detailed analysis explaining why this tool matches their needs and ho
             `)
             .eq('id', topTool.tool_id)
             .single();
+
+          Logger.info('Fallback tool fetch result', {
+            component: 'VectorSearchService',
+            hasError: !!toolError,
+            hasData: !!fullTool,
+            toolTitle: fullTool?.title,
+          });
 
           if (!toolError && fullTool) {
             const recommendedTool = {
@@ -346,8 +454,22 @@ ANALYSIS: [detailed analysis explaining why this tool matches their needs and ho
 
       // Step 4: Parse AI response
       const responseText = aiResponse.response;
+
+      Logger.info('Parsing AI response', {
+        component: 'VectorSearchService',
+        responseLength: responseText.length,
+        responsePreview: responseText.substring(0, 200),
+      });
+
       const toolMatch = responseText.match(/RECOMMENDED_TOOL:\s*(.+?)(?:\n|$)/);
       const analysisMatch = responseText.match(/ANALYSIS:\s*([\s\S]+)/);
+
+      Logger.info('Extracted data from AI response', {
+        component: 'VectorSearchService',
+        hasToolMatch: !!toolMatch,
+        hasAnalysisMatch: !!analysisMatch,
+        recommendedToolTitle: toolMatch?.[1]?.trim() || 'None',
+      });
 
       let recommendedTool: DynamicTool | null = null;
       let analysis = responseText;
@@ -356,14 +478,34 @@ ANALYSIS: [detailed analysis explaining why this tool matches their needs and ho
         const recommendedToolTitle = toolMatch[1].trim();
         analysis = analysisMatch[1].trim();
 
+        Logger.info('Successfully parsed AI recommendation', {
+          component: 'VectorSearchService',
+          recommendedToolTitle,
+          analysisLength: analysis.length,
+        });
+
         // Find the recommended tool in our similar tools list
-        const foundSimilarTool = similarTools.find(tool => 
+        const foundSimilarTool = similarTools.find(tool =>
           tool.title.toLowerCase() === recommendedToolTitle.toLowerCase() ||
           tool.title.includes(recommendedToolTitle) ||
           recommendedToolTitle.includes(tool.title)
         );
 
+        Logger.info('Searching for recommended tool in similar tools list', {
+          component: 'VectorSearchService',
+          recommendedToolTitle,
+          found: !!foundSimilarTool,
+          foundToolId: foundSimilarTool?.tool_id,
+          foundToolTitle: foundSimilarTool?.title,
+        });
+
         if (foundSimilarTool) {
+          Logger.info('Fetching full tool data from database', {
+            component: 'VectorSearchService',
+            toolId: foundSimilarTool.tool_id,
+            toolTitle: foundSimilarTool.title,
+          });
+
           // Fetch full tool data
           const { data: fullTool, error: toolError } = await supabase
             .from('tools')
@@ -374,6 +516,15 @@ ANALYSIS: [detailed analysis explaining why this tool matches their needs and ho
             `)
             .eq('id', foundSimilarTool.tool_id)
             .single();
+
+          Logger.info('Full tool fetch result', {
+            component: 'VectorSearchService',
+            hasError: !!toolError,
+            errorMessage: toolError?.message,
+            hasData: !!fullTool,
+            toolTitle: fullTool?.title,
+            questionsCount: fullTool?.questions?.length || 0,
+          });
 
           if (!toolError && fullTool) {
             recommendedTool = {
@@ -412,7 +563,23 @@ ANALYSIS: [detailed analysis explaining why this tool matches their needs and ho
         queryLength: userQuery.length,
         similarToolsFound: similarTools.length,
         recommendedTool: recommendedTool?.title || 'None',
+        recommendedToolId: recommendedTool?.id || 'None',
+        hasAnalysis: !!analysis,
+        analysisLength: analysis.length,
         tokensSaved,
+      });
+
+      Logger.info('Final recommendation object being returned', {
+        component: 'VectorSearchService',
+        result: {
+          hasRecommendedTool: !!recommendedTool,
+          toolId: recommendedTool?.id,
+          toolTitle: recommendedTool?.title,
+          toolCategory: recommendedTool?.category,
+          questionsCount: recommendedTool?.questions?.length || 0,
+          similarToolsCount: similarTools.length,
+          analysisPreview: analysis.substring(0, 100),
+        },
       });
 
       return {
