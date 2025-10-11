@@ -1,0 +1,42 @@
+whenever you create DBs sql use this rule
+
+The Ultimate Rulebook for Bulletproof SQL Migrations
+Atomicity: Wrap Everything in a Transaction.
+
+Rule: Every migration script must start with BEGIN; and end with COMMIT;.
+
+Why: This guarantees that all commands within the file either succeed as a single unit or fail completely, leaving the database untouched. It prevents the database from ever being left in a half-finished, broken state.
+
+Idempotency: Assume Nothing, Check Everything.
+
+Rule: Every command that creates or modifies a database object must first check if that object already exists or if the change has already been made.
+
+Why: This is the absolute key to making a script re-runnable. It prevents the common "already exists" errors that plague migration systems. We use a specific toolkit for this:
+
+Tables, Extensions, Indexes: CREATE ... IF NOT EXISTS;
+
+Policies, Triggers, Constraints: DROP ... IF EXISTS; followed by CREATE ...; to ensure the latest version is always applied.
+
+Functions: CREATE OR REPLACE FUNCTION; (and DROP FUNCTION IF EXISTS ...; first if the function's return signature changes).
+
+Seeding Data: INSERT INTO ... ON CONFLICT (...) DO NOTHING; to prevent duplicate data errors.
+
+Adding Columns: A DO $$BEGIN IF NOT EXISTS (...) THEN ... END IF; END$$; block to check the database's internal information_schema.
+
+Clarity: Document the "Why," Not Just the "What."
+
+Rule: Every migration file must have a clear header explaining its purpose in plain English. Every complex piece of logic should have a comment explaining why it's necessary.
+
+Why: Code is read far more often than it is written. Clear documentation makes the system understandable and maintainable for your future self and for any new developers joining the project.
+
+Chronology: Use Timestamp-Based Naming.
+
+Rule: Every migration file must be named with a timestamp prefix (e.g., YYYYMMDDHHMMSS_descriptive_name.sql).
+
+Why: This is the industry standard that guarantees migration scripts are always executed in the exact order they were created. This is critical for building the database schema correctly from scratch.
+
+Security: Secure by Default.
+
+Rule: Always assume Row Level Security (RLS) is enabled. Explicitly grant permissions (GRANT) and create policies (CREATE POLICY) for every table and storage bucket. Use SECURITY DEFINER functions sparingly and only when absolutely necessary to bypass RLS for a specific, secure task (like checking an admin role).
+
+Why: Data security cannot be an afterthought. This principle ensures that no data is accidentally exposed and that all access is deliberate and documented in the code.
