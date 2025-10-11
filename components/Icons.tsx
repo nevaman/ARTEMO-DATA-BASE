@@ -41,6 +41,7 @@ export const ArrowLeftIcon: React.FC<IconProps> = ({ className }) => <Icon class
 export const ArrowRightIcon: React.FC<IconProps> = ({ className }) => <Icon className={className}><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></Icon>;
 export const FolderIcon: React.FC<IconProps> = ({ className }) => <Icon className={className}><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></Icon>;
 export const XIcon: React.FC<IconProps> = ({ className }) => <Icon className={className}><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></Icon>;
+export const LockIcon: React.FC<IconProps> = ({ className }) => <Icon className={className}><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></Icon>;
 export const StarIcon: React.FC<StarIconProps> = ({ className, isFilled }) => <Icon className={className} isFilled={isFilled}><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></Icon>;
 export const PaperclipIcon: React.FC<IconProps> = ({ className }) => <Icon className={className}><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path></Icon>;
 export const ChevronDownIcon: React.FC<IconProps> = ({ className }) => <Icon className={className}><polyline points="6 9 12 15 18 9"></polyline></Icon>;

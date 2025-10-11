@@ -61,6 +61,7 @@ export const AdminTools: React.FC = () => {
     category: '',
     active: true,
     featured: false,
+    is_pro: false,
     primaryModel: 'Claude',
     fallbackModels: [] as string[],
     promptInstructions: '',
@@ -77,6 +78,7 @@ export const AdminTools: React.FC = () => {
       category: allCategories[0]?.name || '',
       active: true,
       featured: false,
+      is_pro: false,
       primaryModel: 'Claude',
       fallbackModels: ['OpenAI'],
       promptInstructions: '',
@@ -94,6 +96,7 @@ export const AdminTools: React.FC = () => {
       category: tool.category,
       active: tool.active,
       featured: tool.featured,
+      is_pro: tool.is_pro || false,
       primaryModel: tool.primaryModel,
       fallbackModels: tool.fallbackModels,
       promptInstructions: tool.promptInstructions,
@@ -256,6 +259,7 @@ export const AdminTools: React.FC = () => {
         category: formData.category,
         active: formData.active,
         featured: formData.featured,
+        is_pro: formData.is_pro,
         primaryModel: formData.primaryModel,
         fallbackModels: formData.fallbackModels,
         promptInstructions: formData.promptInstructions,
@@ -479,6 +483,11 @@ export const AdminTools: React.FC = () => {
                                 {tool.title}
                               </span>
                               {tool.featured && <StarIcon className="w-4 h-4 text-yellow-500" isFilled />}
+                              {tool.is_pro && (
+                                <span className="text-xs font-bold text-accent-dark-blue dark:text-accent-light-blue bg-accent-light-blue/50 dark:bg-accent-dark-blue/20 py-0.5 px-2 rounded-full">
+                                  PRO
+                                </span>
+                              )}
                             </div>
                             <div className="text-sm text-light-text-tertiary dark:text-dark-text-tertiary">
                               <TruncatedDescription description={tool.description} maxLength={80} />
@@ -667,6 +676,15 @@ export const AdminTools: React.FC = () => {
                         className="h-4 w-4 text-primary-accent focus:ring-primary-accent border-gray-300 rounded"
                       />
                       <span className="text-sm font-medium text-light-text-primary dark:text-dark-text-primary">Featured</span>
+                    </label>
+                    <label className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={formData.is_pro}
+                        onChange={(e) => setFormData(prev => ({ ...prev, is_pro: e.target.checked }))}
+                        className="h-4 w-4 text-primary-accent focus:ring-primary-accent border-gray-300 rounded"
+                      />
+                      <span className="text-sm font-medium text-light-text-primary dark:text-dark-text-primary">Pro Tool</span>
                     </label>
                   </div>
                   <div className="pt-4 border-t border-light-border dark:border-dark-border">

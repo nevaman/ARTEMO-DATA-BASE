@@ -5,6 +5,7 @@ import { AuthWrapper } from './components/AuthWrapper';
 import { AuthManager } from './components/AuthManager';
 import { useAuthStore } from './stores/authStore';
 import { useUIStore } from './stores/uiStore'; // Import the UI store
+import { ProUpgradeModal } from './components/ProUpgradeModal';
 
 // Layout Components
 import { AppLayout } from './layouts/AppLayout';
@@ -65,6 +66,7 @@ const App: React.FC = () => {
     <ErrorBoundary>
       <AuthWrapper>
         <AuthManager>
+          <ProUpgradeModal />
           <Routes>
             {/* User Routes with Shared Layout */}
             <Route path="/" element={

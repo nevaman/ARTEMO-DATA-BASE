@@ -12,6 +12,7 @@ interface UIState {
   isChatSearchOpen: boolean;
   itemToRename: { id: string; name: string; type: 'project' | 'chat' } | null;
   toolForActivation: DynamicTool | null;
+  showProUpgradeModal: boolean;
   
   // Actions
   toggleTheme: () => void;
@@ -25,6 +26,7 @@ interface UIState {
   closeChatSearch: () => void;
   setItemToRename: (item: { id: string; name: string; type: 'project' | 'chat' } | null) => void;
   setToolForActivation: (tool: DynamicTool | null) => void;
+  setShowProUpgradeModal: (show: boolean) => void;
 }
 
 export const useUIStore = create<UIState>()(
@@ -39,6 +41,9 @@ export const useUIStore = create<UIState>()(
     isChatSearchOpen: false,
     itemToRename: null,
     toolForActivation: null,
+    showProUpgradeModal: false,
+
+    setShowProUpgradeModal: (show: boolean) => set({ showProUpgradeModal: show }),
 
     toggleTheme: () => set((state) => ({
       theme: state.theme === 'light' ? 'dark' : 'light'

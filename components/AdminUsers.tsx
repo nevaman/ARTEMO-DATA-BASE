@@ -97,7 +97,7 @@ export const AdminUsers: React.FC = () => {
   const [formData, setFormData] = useState({
     fullName: '',
     email: '',
-    role: 'user' as 'user' | 'admin',
+    role: 'user' as 'user' | 'admin' | 'pro',
     active: true,
   });
 
@@ -183,7 +183,7 @@ export const AdminUsers: React.FC = () => {
     setFormData({
       fullName: user.fullName,
       email: user.email,
-      role: user.role,
+      role: user.role as 'user' | 'admin' | 'pro',
       active: user.active,
     });
     setModalOpen(true);
@@ -294,29 +294,30 @@ export const AdminUsers: React.FC = () => {
     }
   };
 
-  const handleRoleChange = async (id: string) => {
+  const handleRoleChange = async (id: string, newRole: 'user' | 'pro' | 'admin') => {
     const user = users.find(u => u.id === id);
     if (!user) return;
 
-    const newRole = user.role === 'admin' ? 'user' : 'admin';
+    if (user.role === newRole) return;
+
     const confirmed = await confirmDialog.confirmRoleChange(user.fullName, user.role, newRole);
     if (!confirmed) return;
     
     setActionLoading(id);
     
     try {
-      const response = await api.updateUserRole(id, newRole, 'Role updated by admin');
+      const response = await api.updateUserRole(id, newRole, `Role changed to ${newRole} by admin`);
       if (response.success) {
         setUsers(prev => prev.map(u => 
           u.id === id ? { ...u, role: newRole } : u
         ));
-        notifications.success(`User ${newRole === 'admin' ? 'promoted to admin' : 'demoted to user'} successfully`);
+        notifications.success(`User role updated to ${newRole} successfully`);
       } else {
         throw new Error(response.error || 'Failed to update user role');
       }
     } catch (error) {
       console.error('Failed to update user role:', error);
-      notifications.error(`Failed to ${newRole === 'admin' ? 'promote' : 'demote'} user. Please try again.`);
+      notifications.error(`Failed to update user role to ${newRole}. Please try again.`);
     } finally {
       setActionLoading(null);
     }
@@ -439,12 +440,14 @@ export const AdminUsers: React.FC = () => {
                     </div>
                   </td>
                   <td className="p-4">
-                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                    <span className={`px-2 py-1 rounded-full text-xs font-medium capitalize ${
                       user.role === 'admin'
                         ? 'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300'
+                        : user.role === 'pro'
+                        ? 'bg-accent-light-blue text-accent-dark-blue dark:bg-accent-dark-blue/30 dark:text-accent-light-blue'
                         : 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300'
                     }`}>
-                      {user.role === 'admin' ? 'Admin' : 'User'}
+                      {user.role}
                     </span>
                   </td>
                   <td className="p-4">
@@ -470,13 +473,18 @@ export const AdminUsers: React.FC = () => {
                       >
                         {actionLoading === user.id ? 'Loading...' : (user.active ? 'Disable' : 'Enable')}
                       </button>
-                      <button
-                        onClick={() => handleRoleChange(user.id)}
-                        disabled={actionLoading === user.id}
-                        className="px-2 py-1 text-xs rounded-md bg-light-bg-sidebar dark:bg-dark-bg-page text-light-text-secondary dark:text-dark-text-secondary hover:text-light-text-primary dark:hover:text-dark-text-primary disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        {actionLoading === user.id ? 'Loading...' : (user.role === 'admin' ? 'Demote' : 'Promote')}
-                      </button>
+                      <div className="relative">
+                        <select
+                          value={user.role}
+                          onChange={(e) => handleRoleChange(user.id, e.target.value as 'user' | 'pro' | 'admin')}
+                          disabled={actionLoading === user.id}
+                          className="pl-2 pr-6 py-1 text-xs rounded-md bg-light-bg-sidebar dark:bg-dark-bg-page text-light-text-secondary dark:text-dark-text-secondary hover:text-light-text-primary dark:hover:text-dark-text-primary disabled:opacity-50 disabled:cursor-not-allowed appearance-none"
+                        >
+                          <option value="user">User</option>
+                          <option value="pro">Pro</option>
+                          <option value="admin">Admin</option>
+                        </select>
+                      </div>
                       <button
                         onClick={() => handleEdit(user)}
                         disabled={actionLoading === user.id}
@@ -541,10 +549,11 @@ export const AdminUsers: React.FC = () => {
                 </label>
                 <select
                   value={formData.role}
-                  onChange={(e) => setFormData(prev => ({ ...prev, role: e.target.value as 'user' | 'admin' }))}
+                  onChange={(e) => setFormData(prev => ({ ...prev, role: e.target.value as 'user' | 'admin' | 'pro' }))}
                   className="w-full p-3 border border-light-border dark:border-dark-border rounded-md bg-light-bg-component dark:bg-dark-bg-component text-light-text-primary dark:text-dark-text-primary focus:ring-2 focus:ring-primary-accent focus:border-primary-accent outline-none"
                 >
                   <option value="user">User</option>
+                  <option value="pro">Pro</option>
                   <option value="admin">Admin</option>
                 </select>
               </div>
