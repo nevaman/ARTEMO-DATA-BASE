@@ -14,8 +14,6 @@ INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_typ
 VALUES ('knowledge-base', 'knowledge-base', false, 26214400, ARRAY['application/pdf', 'text/plain', 'text/markdown', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'])
 ON CONFLICT (id) DO NOTHING;
 
-COMMENT ON TABLE storage.buckets IS 'Defines the storage buckets for the application.';
- 
 -- Section: Storage Row Level Security Policies
 -- These policies control who can access the actual files within the "knowledge-base" bucket.
 
@@ -56,6 +54,7 @@ USING (
   bucket_id = 'knowledge-base' AND
   auth.uid()::text = (storage.foldername(name))[1]
 );
-  
+
 
 COMMIT;
+
