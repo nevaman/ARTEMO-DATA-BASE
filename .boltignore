@@ -1,0 +1,32 @@
+# =============================================================================
+# DATABASE & MIGRATION ARTIFACTS
+# =============================================================================
+# Keep migration files but exclude artifacts
+.bolt/supabase_discarded_migrations/
+database/rls-backups/
+database/dumps/
+*.sql.backup
+*.sql.tmp
+
+
+# =============================================================================
+# BACKUP & ARCHIVE FILES
+# =============================================================================
+*.backup
+*.bak
+*.old
+*.orig
+*.save
+*.archive
+backup/
+backups/
+archives/
+
+# =============================================================================
+# STORYBOOK & DESIGN SYSTEM
+# =============================================================================
+.storybook/
+storybook-static/
+chromatic-build/
+design-tokens/
+style-guide/

@@ -1,0 +1,70 @@
+{
+  "env": {
+    "browser": true,
+    "es2021": true,
+    "node": true
+  },
+  "extends": [
+    "eslint:recommended",
+    "@typescript-eslint/recommended",
+    "plugin:react/recommended",
+    "plugin:react-hooks/recommended"
+  ],
+  "parser": "@typescript-eslint/parser",
+  "parserOptions": {
+    "ecmaFeatures": {
+      "jsx": true
+    },
+    "ecmaVersion": 12,
+    "sourceType": "module"
+  },
+  "plugins": [
+    "react",
+    "@typescript-eslint",
+    "react-hooks"
+  ],
+  "rules": {
+    "react/react-in-jsx-scope": "off",
+    "@typescript-eslint/no-unused-vars": ["error", { "argsIgnorePattern": "^_" }],
+    "@typescript-eslint/no-explicit-any": "warn",
+    
+    // CRITICAL: Prevent native browser dialogs
+    "no-alert": "error",
+    "no-confirm": "error",
+    "no-restricted-globals": [
+      "error",
+      {
+        "name": "alert",
+        "message": "Use useNotifications() hook instead of alert(). Import: import { useNotifications } from '../contexts/NotificationContext';"
+      },
+      {
+        "name": "confirm", 
+        "message": "Use useConfirmationDialog() hook instead of confirm(). Import: import { useConfirmationDialog } from '../hooks/useConfirmationDialog';"
+      },
+      {
+        "name": "prompt",
+        "message": "Use a custom input dialog component instead of prompt()."
+      }
+    ],
+    "no-restricted-syntax": [
+      "error",
+      {
+        "selector": "CallExpression[callee.object.name='window'][callee.property.name='alert']",
+        "message": "Use useNotifications() hook instead of window.alert(). Import: import { useNotifications } from '../contexts/NotificationContext';"
+      },
+      {
+        "selector": "CallExpression[callee.object.name='window'][callee.property.name='confirm']",
+        "message": "Use useConfirmationDialog() hook instead of window.confirm(). Import: import { useConfirmationDialog } from '../hooks/useConfirmationDialog';"
+      },
+      {
+        "selector": "CallExpression[callee.object.name='window'][callee.property.name='prompt']",
+        "message": "Use a custom input dialog component instead of window.prompt()."
+      }
+    ]
+  },
+  "settings": {
+    "react": {
+      "version": "detect"
+    }
+  }
+}
