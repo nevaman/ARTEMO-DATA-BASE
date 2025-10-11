@@ -56,6 +56,6 @@ USING (
   bucket_id = 'knowledge-base' AND
   auth.uid()::text = (storage.foldername(name))[1]
 );
- 
+  
 
 COMMIT;
