@@ -46,13 +46,12 @@ export class AppApiService {
         try {
             console.log('AppApiService: Fetching tools from database');
             const { data, error } = await supabase
-                .from('tools')
+                .from('tool_catalog')
                 .select(`
                     *,
                     category:categories(*),
                     questions:tool_questions(*)
                 `)
-                .eq('active', true)
                 .order('created_at', { ascending: false });
 
             if (error) {
@@ -67,9 +66,9 @@ export class AppApiService {
                 active: tool.active,
                 featured: tool.featured,
                 is_pro: tool.is_pro ?? false,
-                primaryModel: tool.primary_model,
-                fallbackModels: tool.fallback_models || [],
-                promptInstructions: tool.prompt_instructions,
+                primaryModel: '',
+                fallbackModels: [],
+                promptInstructions: '',
                 questions: (tool.questions || [])
                     .sort((a: any, b: any) => a.question_order - b.question_order)
                     .map((q: any) => ({
