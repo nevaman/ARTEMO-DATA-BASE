@@ -24,13 +24,13 @@ interface ToolCardProps {
 export const ToolCard: React.FC<ToolCardProps> = ({ tool }) => {
     const navigate = useNavigate();
     const { categories } = useCategories();
-    const { isPro, isAdmin } = useAuthStore();
+    const { user } = useAuthStore();
     const { favoriteTools, toggleFavorite, setToolForActivation, showProUpgradeModal, setShowProUpgradeModal } = useUIStore();
     const [categoryIcon, setCategoryIcon] = useState<{ name: string; color: string } | null>(null);
-
+    
     const isFavorite = favoriteTools.includes(tool.id);
     const isProTool = tool.is_pro;
-    const canAccess = !isProTool || isPro || isAdmin;
+    const canAccess = !isProTool || user?.role === 'pro' || user?.role === 'admin';
     
     // Update category icon when categories change
     const updateCategoryIcon = useCallback(() => {
