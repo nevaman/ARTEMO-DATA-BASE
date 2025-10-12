@@ -20,6 +20,7 @@ export interface DynamicTool {
   description: string;
   active: boolean;
   featured: boolean;
+  is_pro: boolean;
   primaryModel: string;
   fallbackModels: string[];
   promptInstructions?: string | null;
@@ -97,6 +98,7 @@ export interface Announcement {
 export interface UserProfile {
     id: string;
     email: string;
+    role: 'user' | 'pro' | 'admin';
     username?: string;
     preferences?: {
         clientProfiles?: ClientProfile[];

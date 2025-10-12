@@ -66,6 +66,7 @@ export class AppApiService {
                 description: tool.description,
                 active: tool.active,
                 featured: tool.featured,
+                is_pro: tool.is_pro ?? false,
                 primaryModel: tool.primary_model,
                 fallbackModels: tool.fallback_models || [],
                 promptInstructions: tool.prompt_instructions,

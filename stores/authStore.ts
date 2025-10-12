@@ -11,7 +11,7 @@ export type SessionStatus = 'loading' | 'authenticated' | 'refreshing' | 'unauth
 interface UserProfile {
   id: string;
   full_name: string | null;
-  role: 'user' | 'admin';
+  role: 'user' | 'admin' | 'pro';
   organization: string | null;
   avatar_url: string | null;
   preferences: {
@@ -31,6 +31,7 @@ interface AuthState {
   isLoading: boolean;
   isAuthenticated: boolean;
   isAdmin: boolean;
+  isPro: boolean;
   sessionStatus: SessionStatus;
   refreshPromise: Promise<boolean> | null;
   activeClientProfileId: string | null;
@@ -63,6 +64,7 @@ export const useAuthStore = create<AuthState>()(
       isLoading: true,
       isAuthenticated: false,
       isAdmin: false,
+      isPro: false,
       sessionStatus: 'loading',
       refreshPromise: null,
       activeClientProfileId: null,
@@ -141,6 +143,7 @@ export const useAuthStore = create<AuthState>()(
         set({
           profile,
           isAdmin: profile?.role === 'admin',
+          isPro: profile?.role === 'pro' || profile?.role === 'admin',
         });
         
         // Initialize active client profile if none is set
@@ -187,6 +190,7 @@ export const useAuthStore = create<AuthState>()(
           profile: null,
           isAuthenticated: false,
           isAdmin: false,
+          isPro: false,
           sessionStatus: 'unauthenticated',
           refreshPromise: null,
         });
@@ -384,6 +388,7 @@ export const useAuthStore = create<AuthState>()(
         profile: state.profile,
         isAuthenticated: state.isAuthenticated,
         isAdmin: state.isAdmin,
+        isPro: state.isPro,
         activeClientProfileId: state.activeClientProfileId,
       }),
       onRehydrateStorage: () => (state) => {

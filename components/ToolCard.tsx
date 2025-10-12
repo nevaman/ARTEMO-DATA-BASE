@@ -3,8 +3,10 @@ import { useNavigate } from 'react-router-dom';
 import type { DynamicTool } from '../types';
 import { useCategories } from '../hooks/useCategories';
 import { useUIStore } from '../stores/uiStore';
+import { useAuthStore } from '../stores/authStore';
 import { 
     StarIcon, 
+    LockIcon,
     BoxIcon, 
     SettingsIcon, 
     EditIcon, 
@@ -22,10 +24,13 @@ interface ToolCardProps {
 export const ToolCard: React.FC<ToolCardProps> = ({ tool }) => {
     const navigate = useNavigate();
     const { categories } = useCategories();
-    const { favoriteTools, toggleFavorite, setToolForActivation } = useUIStore();
+    const { isPro, isAdmin } = useAuthStore();
+    const { favoriteTools, toggleFavorite, setToolForActivation, showProUpgradeModal, setShowProUpgradeModal } = useUIStore();
     const [categoryIcon, setCategoryIcon] = useState<{ name: string; color: string } | null>(null);
-    
+
     const isFavorite = favoriteTools.includes(tool.id);
+    const isProTool = tool.is_pro;
+    const canAccess = !isProTool || isPro || isAdmin;
     
     // Update category icon when categories change
     const updateCategoryIcon = useCallback(() => {
@@ -91,7 +96,11 @@ export const ToolCard: React.FC<ToolCardProps> = ({ tool }) => {
     const iconColor = categoryIcon?.color || 'text-primary-accent';
     
     const handleToolClick = () => {
-        setToolForActivation(tool);
+        if (canAccess) {
+            setToolForActivation(tool);
+        } else {
+            setShowProUpgradeModal(true);
+        }
     };
     
     const handleFavoriteClick = (e: React.MouseEvent) => {
@@ -121,7 +130,17 @@ export const ToolCard: React.FC<ToolCardProps> = ({ tool }) => {
                 {tool.featured && (
                     <span className="text-xs font-medium text-yellow-600 dark:text-yellow-400 bg-yellow-100 dark:bg-yellow-900/30 py-1 px-2 rounded-sm">Featured</span>
                 )}
+                {isProTool && (
+                  <span className="text-xs font-bold text-accent-dark-blue dark:text-accent-light-blue bg-accent-light-blue/50 dark:bg-accent-dark-blue/20 py-1 px-2 rounded-sm">
+                    PRO
+                  </span>
+                )}
             </div>
+            {!canAccess && (
+                <div className="absolute inset-0 bg-black/40 dark:bg-black/60 flex items-center justify-center rounded-md opacity-0 group-hover:opacity-100 transition-opacity">
+                    <LockIcon className="w-8 h-8 text-white" />
+                </div>
+            )}
         </a>
     );
 };
