@@ -1,4 +1,4 @@
--- Filename: 20251012132615_feature_pro_tool_visibility_rls.sql
+-- Filename: 20251011211209_feature_pro_tool_visibility_rls.sql
 -- Feature: Pro Tool Visibility Gap (RLS Update)
 -- Description: This migration applies Row Level Security policies to the new
 --              `tool_catalog` view, ensuring that all authenticated users can
