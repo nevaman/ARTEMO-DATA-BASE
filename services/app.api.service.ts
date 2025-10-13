@@ -44,44 +44,50 @@ export class AppApiService {
         }
 
         try {
-            console.log('AppApiService: Fetching tools from database');
+            console.log('AppApiService: Fetching tools from the tool_catalog view');
+            
+            // --- FIX STARTS HERE ---
+            // 1. Query the 'tool_catalog' view instead of the 'tools' table.
+            // 2. The select statement is simplified to '*' because the view now contains all necessary data.
             const { data, error } = await supabase
-                .from('tools')
-                .select(`
-                    *,
-                    category:categories(*),
-                    questions:tool_questions(*)
-                `)
-                .eq('active', true)
+                .from('tool_catalog')
+                .select('*')
                 .order('created_at', { ascending: false });
+            // --- FIX ENDS HERE ---
 
             if (error) {
                 throw error;
             }
 
+            // --- MAPPING LOGIC UPDATE STARTS HERE ---
+            // The mapping logic is updated to match the flattened structure of the view.
             const tools: DynamicTool[] = (data || []).map(tool => ({
                 id: tool.id,
                 title: tool.title,
-                category: tool.category?.name || 'Other',
+                // Use 'category_name' from the view
+                category: tool.category_name || 'Other',
                 description: tool.description,
                 active: tool.active,
                 featured: tool.featured,
                 is_pro: tool.is_pro ?? false,
                 primaryModel: tool.primary_model,
                 fallbackModels: tool.fallback_models || [],
-                promptInstructions: tool.prompt_instructions,
-                questions: (tool.questions || [])
-                    .sort((a: any, b: any) => a.question_order - b.question_order)
-                    .map((q: any) => ({
-                        id: q.id,
-                        label: q.label,
-                        type: q.type,
-                        placeholder: q.placeholder,
-                        required: q.required,
-                        order: q.question_order,
-                        options: q.options,
-                    })),
+                // Note: The view does not expose sensitive prompt instructions.
+                // This is correct and secure. The app should handle if this is null.
+                promptInstructions: tool.prompt_instructions || null, 
+                // The 'questions' field from the view is already a sorted JSON array.
+                questions: (tool.questions || []).map((q: any) => ({
+                    id: q.id,
+                    label: q.label,
+                    type: q.type,
+                    placeholder: q.placeholder,
+                    required: q.required,
+                    // Use 'question_order' if it exists in your JSON, otherwise use 'order'
+                    order: q.question_order || q.order, 
+                    options: q.options,
+                })),
             }));
+            // --- MAPPING LOGIC UPDATE ENDS HERE ---
 
             console.log('AppApiService: Tools fetched successfully:', tools.length);
             return { success: true, data: tools };
