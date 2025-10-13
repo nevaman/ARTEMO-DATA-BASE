@@ -33,7 +33,10 @@ Deno.serve(async (req: Request) => {
     }
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
-    const { action, userId, reason } = await req.json();
+    const requestBody = await req.json();
+    const action = requestBody.action?.toString().trim();
+    const userId = requestBody.userId;
+    const reason = requestBody.reason;
     console.log(`Processing action: "${action}" for user: ${userId}`);
 
     // --- Admin Verification (Your existing code is correct) ---
