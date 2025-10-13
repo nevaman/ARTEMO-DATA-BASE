@@ -1,14 +1,23 @@
 -- Filename: 20251011211208_tool_catalog_view.sql
--- Description: Introduce tool_catalog view to expose active tools to all authenticated users
---              while preserving admin control of the base tools table.
+-- Description: Creates/updates the tool_catalog view to expose active tools to all
+--              authenticated users, including aggregated question data. This version
+--              safely handles structural changes by dropping and recreating the view.
 
 BEGIN;
 
-CREATE OR REPLACE VIEW public.tool_catalog
-WITH (security_invoker = false) AS
+-- To safely handle changes in the view's columns (names, order, or types),
+-- the most robust method is to drop the view if it exists and then create it fresh.
+-- This is more reliable than attempting complex ALTER VIEW commands.
+DROP VIEW IF EXISTS public.tool_catalog;
+
+-- Create the new, comprehensive view.
+-- This acts as a "one-stop-shop" query for the application, combining data from
+-- tools, categories, and tool_questions into a single, efficient source.
+CREATE VIEW public.tool_catalog AS
 SELECT
     t.id,
     t.title,
+    t.slug,
     t.description,
     t.active,
     t.featured,
@@ -20,6 +29,8 @@ SELECT
     c.icon_name AS category_icon_name,
     c.icon_color AS category_icon_color,
     t.created_at,
+    -- This subquery aggregates all questions for a tool into a single JSON array.
+    -- This is highly efficient as it prevents the N+1 query problem on the client-side.
     COALESCE(
         (
             SELECT jsonb_agg(
@@ -38,10 +49,14 @@ SELECT
         ),
         '[]'::jsonb
     ) AS questions
-FROM public.tools t
-JOIN public.categories c ON c.id = t.category_id
-WHERE t.active = true;
+FROM
+    public.tools t
+JOIN
+    public.categories c ON c.id = t.category_id
+WHERE
+    t.active = true;
 
+-- Grant necessary permissions on the new view.
 GRANT USAGE ON SCHEMA public TO authenticated;
 GRANT SELECT ON public.tool_catalog TO authenticated;
 
