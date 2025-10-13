@@ -46,42 +46,43 @@ export class AppApiService {
         try {
             console.log('AppApiService: Fetching tools from database');
             const { data, error } = await supabase
-                .from('tools')
-                .select(`
-                    *,
-                    category:categories(*),
-                    questions:tool_questions(*)
-                `)
-                .eq('active', true)
+                .from('tool_catalog')
+                .select('*')
                 .order('created_at', { ascending: false });
 
             if (error) {
                 throw error;
             }
 
-            const tools: DynamicTool[] = (data || []).map(tool => ({
-                id: tool.id,
-                title: tool.title,
-                category: tool.category?.name || 'Other',
-                description: tool.description,
-                active: tool.active,
-                featured: tool.featured,
-                is_pro: tool.is_pro ?? false,
-                primaryModel: tool.primary_model,
-                fallbackModels: tool.fallback_models || [],
-                promptInstructions: tool.prompt_instructions,
-                questions: (tool.questions || [])
-                    .sort((a: any, b: any) => a.question_order - b.question_order)
-                    .map((q: any) => ({
-                        id: q.id,
-                        label: q.label,
-                        type: q.type,
-                        placeholder: q.placeholder,
-                        required: q.required,
-                        order: q.question_order,
-                        options: q.options,
-                    })),
-            }));
+            const tools: DynamicTool[] = (data || []).map(tool => {
+                const questionsSource: any[] = Array.isArray(tool.questions)
+                    ? tool.questions
+                    : [];
+
+                return {
+                    id: tool.id,
+                    title: tool.title,
+                    category: tool.category_name || 'Other',
+                    description: tool.description,
+                    active: tool.active,
+                    featured: tool.featured,
+                    is_pro: tool.is_pro ?? false,
+                    primaryModel: tool.primary_model,
+                    fallbackModels: Array.isArray(tool.fallback_models) ? tool.fallback_models : [],
+                    promptInstructions: null,
+                    knowledgeBaseFileId: null,
+                    questions: questionsSource
+                        .map((q: any, index: number) => ({
+                            id: q.id,
+                            label: q.label,
+                            type: q.type,
+                            placeholder: q.placeholder ?? undefined,
+                            required: q.required ?? false,
+                            order: q.question_order ?? index,
+                            options: Array.isArray(q.options) ? q.options : undefined,
+                        })),
+                };
+            });
 
             console.log('AppApiService: Tools fetched successfully:', tools.length);
             return { success: true, data: tools };
