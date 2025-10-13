@@ -3,8 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import type { DynamicTool } from '../types';
 import { useTools } from '../hooks/useTools';
 import { useUIStore } from '../stores/uiStore';
-import { SupabaseApiService } from '../services/supabaseApi';
-import { VectorSearchService } from '../services/vectorSearchService';
+import { VectorSearchService, type SimilarTool } from '../services/vectorSearchService';
 import { ToolCard } from './ToolCard';
 import { SendIcon, XIcon } from './Icons';
 import { VectorSearchStatus } from './VectorSearchStatus';
@@ -20,14 +19,15 @@ export const DashboardView: React.FC<DashboardViewProps> = () => {
     const [recommendedTool, setRecommendedTool] = useState<DynamicTool | null>(null);
     const [analysisResult, setAnalysisResult] = useState<string>('');
     const [tokensSaved, setTokensSaved] = useState<number>(0);
-    const [useVectorSearch, setUseVectorSearch] = useState(true);
-    const { featuredTools, loading, error } = useTools();
-    const { tools } = useTools();
+    const [similarTools, setSimilarTools] = useState<SimilarTool[]>([]);
+    const [recommendationSource, setRecommendationSource] = useState<'local' | 'supabase' | null>(null);
+    const [provenance, setProvenance] = useState('');
+    const { tools, featuredTools, loading, error, dataSource } = useTools();
     const { setToolForActivation } = useUIStore();
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     const resultsRef = useRef<HTMLDivElement>(null); // ✨ STEP 1: CREATE BOOKMARK
-    const api = SupabaseApiService.getInstance();
     const vectorService = VectorSearchService.getInstance();
+    const datasetLabel = dataSource === 'supabase' ? 'Supabase catalogue' : 'Local static catalogue';
 
     // Listen for recommended tool selection from project detail view
     useEffect(() => {
@@ -60,13 +60,19 @@ export const DashboardView: React.FC<DashboardViewProps> = () => {
     }, [recommendedTool, analysisResult]);
 
     const analyzePromptAndRecommendTool = async (userPrompt: string) => {
-        if (!userPrompt.trim() || tools.length === 0) return;
-        
+        if (!userPrompt.trim()) {
+            setAnalysisResult('Please tell us what you want to create so we can recommend a tool.');
+            return;
+        }
+
         setIsAnalyzing(true);
         setRecommendedTool(null);
         setAnalysisResult('');
         setTokensSaved(0);
-        
+        setSimilarTools([]);
+        setRecommendationSource(null);
+        setProvenance('');
+
         // Clear any existing conversation state when starting fresh analysis
         try {
             const keys = Object.keys(localStorage);
@@ -80,142 +86,30 @@ export const DashboardView: React.FC<DashboardViewProps> = () => {
         }
         
         try {
-            if (useVectorSearch) {
-                // Use optimized vector search approach
-                const response = await vectorService.getOptimizedToolRecommendation(userPrompt);
-                
-                if (response.success && response.data) {
-                    const { recommendedTool: foundTool, analysis, tokensSaved: saved } = response.data;
-                    
-                    if (foundTool) {
-                        setRecommendedTool(foundTool);
-                        setAnalysisResult(analysis);
-                        setTokensSaved(saved);
-                    } else {
-                        setAnalysisResult(analysis);
-                    }
+            const response = await vectorService.getOptimizedToolRecommendation(userPrompt);
+
+            if (response.success && response.data) {
+                const { recommendedTool: foundTool, analysis, tokensSaved: saved, similarTools: related, source, provenance: provenanceLabel } = response.data;
+
+                setTokensSaved(saved ?? 0);
+                setAnalysisResult(analysis);
+                setSimilarTools(related ?? []);
+                setRecommendationSource(source);
+                setProvenance(provenanceLabel ?? '');
+
+                if (foundTool) {
+                    setRecommendedTool(foundTool);
                 } else {
-                    // Vector search failed, try legacy search as fallback
-                    console.warn('Vector search failed, attempting legacy search:', response.error);
-                    
-                    try {
-                        const systemPrompt = `You are an AI assistant that analyzes user requests and recommends the most appropriate copywriting tool from a list of available tools.
-
-Available tools:
-${tools.map(tool => `- **${tool.title}** (${tool.category}): ${tool.description}`).join('\n')}
-
-User request: "${userPrompt}"
-
-Please analyze the user's request thoroughly and:
-1. Identify the specific type of content they want to create
-2. Consider the target audience, tone, and purpose implied in their request
-3. Match their needs against both the tool titles AND detailed descriptions above
-4. Recommend the MOST APPROPRIATE tool that best fits their specific requirements
-5. Explain why this tool is the perfect match, referencing specific capabilities from the tool's description
-6. Provide actionable insights about their content creation goal
-
-Respond in this format:
-RECOMMENDED_TOOL: [exact tool title from the list]
-ANALYSIS: [detailed analysis explaining why this tool matches their needs, what specific capabilities make it ideal, and how it will help them achieve their content goals]`;
-
-                        const legacyResponse = await api.sendChatMessage('tool-recommendation', [
-                            { id: '1', sender: 'user', text: systemPrompt }
-                        ]);
-
-                        if (legacyResponse.success && legacyResponse.data) {
-                            const responseText = legacyResponse.data;
-                            setUseVectorSearch(false); // Switch to legacy mode
-                            
-                            // Parse the response to extract tool recommendation
-                            const toolMatch = responseText.match(/RECOMMENDED_TOOL:\s*(.+?)(?:\n|$)/);
-                            const analysisMatch = responseText.match(/ANALYSIS:\s*([\s\S]+)/);
-                            
-                            if (toolMatch && analysisMatch) {
-                                const recommendedToolTitle = toolMatch[1].trim();
-                                const analysis = analysisMatch[1].trim();
-                                
-                                // Find the actual tool object
-                                const foundTool = tools.find(tool => 
-                                    tool.title.toLowerCase() === recommendedToolTitle.toLowerCase() ||
-                                    tool.title.includes(recommendedToolTitle) ||
-                                    recommendedToolTitle.includes(tool.title)
-                                );
-                                
-                                if (foundTool) {
-                                    setRecommendedTool(foundTool);
-                                    setAnalysisResult(analysis);
-                                } else {
-                                    setAnalysisResult(responseText);
-                                }
-                            } else {
-                                setAnalysisResult(responseText);
-                            }
-                        } else {
-                            throw new Error('Legacy search also failed');
-                        }
-                    } catch (legacyError) {
-                        console.error('Both vector and legacy search failed:', legacyError);
-                        setAnalysisResult('AI recommendation service is temporarily unavailable. Please browse our tool categories below to find the right tool for your needs, or try again in a few minutes.');
-                        setUseVectorSearch(false);
-                    }
+                    setRecommendedTool(null);
                 }
             } else {
-                // Fallback to original approach (for comparison/debugging)
-                const systemPrompt = `You are an AI assistant that analyzes user requests and recommends the most appropriate copywriting tool from a list of available tools.
-
-Available tools:
-${tools.map(tool => `- **${tool.title}** (${tool.category}): ${tool.description}`).join('\n')}
-
-User request: "${userPrompt}"
-
-Please analyze the user's request thoroughly and:
-1. Identify the specific type of content they want to create
-2. Consider the target audience, tone, and purpose implied in their request
-3. Match their needs against both the tool titles AND detailed descriptions above
-4. Recommend the MOST APPROPRIATE tool that best fits their specific requirements
-5. Explain why this tool is the perfect match, referencing specific capabilities from the tool's description
-6. Provide actionable insights about their content creation goal
-
-Respond in this format:
-RECOMMENDED_TOOL: [exact tool title from the list]
-ANALYSIS: [detailed analysis explaining why this tool matches their needs, what specific capabilities make it ideal, and how it will help them achieve their content goals]`;
-
-                const response = await api.sendChatMessage('tool-recommendation', [
-                    { id: '1', sender: 'user', text: systemPrompt }
-                ]);
-
-                if (response.success && response.data) {
-                    const responseText = response.data;
-                    
-                    // Parse the response to extract tool recommendation
-                    const toolMatch = responseText.match(/RECOMMENDED_TOOL:\s*(.+?)(?:\n|$)/);
-                    const analysisMatch = responseText.match(/ANALYSIS:\s*([\s\S]+)/);
-                    
-                    if (toolMatch && analysisMatch) {
-                        const recommendedToolTitle = toolMatch[1].trim();
-                        const analysis = analysisMatch[1].trim();
-                        
-                        // Find the actual tool object
-                        const foundTool = tools.find(tool => 
-                            tool.title.toLowerCase() === recommendedToolTitle.toLowerCase() ||
-                            tool.title.includes(recommendedToolTitle) ||
-                            recommendedToolTitle.includes(tool.title)
-                        );
-                        
-                        if (foundTool) {
-                            setRecommendedTool(foundTool);
-                            setAnalysisResult(analysis);
-                        } else {
-                            setAnalysisResult(responseText);
-                        }
-                    } else {
-                        setAnalysisResult(responseText);
-                    }
-                }
+                setAnalysisResult(response.error || 'AI recommendation service is temporarily unavailable.');
+                setRecommendationSource(null);
             }
         } catch (error) {
             console.error('Failed to analyze prompt:', error);
-            setAnalysisResult('Unable to analyze your request at the moment. Please try selecting a tool manually.');
+            setAnalysisResult('AI recommendation service is temporarily unavailable. Please browse our tool catalogue or try again later.');
+            setRecommendationSource(null);
         } finally {
             setIsAnalyzing(false);
         }
@@ -290,7 +184,7 @@ ANALYSIS: [detailed analysis explaining why this tool matches their needs, what 
                                 )}
                             </button>
                         </div>
-                         <p className="mt-4 text-xs sm:text-sm text-light-text-tertiary dark:text-dark-text-tertiary max-w-2xl mx-auto px-2">
+                        <p className="mt-4 text-xs sm:text-sm text-light-text-tertiary dark:text-dark-text-tertiary max-w-2xl mx-auto px-2">
                             <span className="font-semibold">Tip:</span> The more details you provide, the better the result. For example: <span className="italic">"a witty tweet about the challenges of remote work"</span>
                         </p>
                     </div>
@@ -311,10 +205,13 @@ ANALYSIS: [detailed analysis explaining why this tool matches their needs, what 
                                         <h3 className="font-serif text-xl font-bold text-light-text-primary dark:text-dark-text-primary mb-4">
                                             AI Recommendation
                                         </h3>
-                                        <p className="text-light-text-secondary dark:text-dark-text-secondary mb-4">
-                                            Based on what you want to create, this is the best-fit tool from our collection.
-                                        </p>
-                                        
+
+                                        {analysisResult && (
+                                            <p className="text-sm text-light-text-secondary dark:text-dark-text-secondary mb-4 whitespace-pre-line">
+                                                {analysisResult}
+                                            </p>
+                                        )}
+
                                         {recommendedTool ? (
                                             <div className="space-y-4">
                                                 <div className="bg-primary-accent/10 border border-primary-accent/20 rounded-lg p-4">
@@ -336,6 +233,9 @@ ANALYSIS: [detailed analysis explaining why this tool matches their needs, what 
                                                             </p>
                                                         </div>
                                                     </div>
+                                                    <p className="text-sm text-light-text-secondary dark:text-dark-text-secondary mb-4">
+                                                        {recommendedTool.description}
+                                                    </p>
                                                     <button
                                                         onClick={() => setToolForActivation(recommendedTool)}
                                                         className="w-full px-4 py-2 bg-primary-accent text-text-on-accent rounded-md hover:opacity-85 transition-opacity font-medium"
@@ -345,21 +245,6 @@ ANALYSIS: [detailed analysis explaining why this tool matches their needs, what 
                                                 </div>
                                             </div>
                                         ) : null}
-                                        {!useVectorSearch && (
-                                            <div className="mt-4 p-3 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg">
-                                                <div className="flex items-center justify-between text-sm">
-                                                    <span className="text-yellow-800 dark:text-yellow-200">
-                                                        ⚠️ Using legacy search (higher token usage)
-                                                    </span>
-                                                    <button
-                                                        onClick={() => setUseVectorSearch(true)}
-                                                        className="text-yellow-600 dark:text-yellow-400 hover:underline text-xs"
-                                                    >
-                                                        Switch to vector search
-                                                    </button>
-                                                </div>
-                                            </div>
-                                        )}
                                     </div>
                                 )}
                             </div>

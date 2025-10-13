@@ -1,0 +1,122 @@
+[
+  {
+    "id": "static-blog-post-wizard",
+    "title": "Blog Post Wizard",
+    "category": "Content Marketing",
+    "description": "Generate long-form blog posts, outlines, and SEO-ready drafts tailored to your target audience.",
+    "active": true,
+    "featured": true,
+    "is_pro": false,
+    "primaryModel": "gpt-4o-mini",
+    "fallbackModels": ["claude-3-haiku"],
+    "promptInstructions": "You are a specialist blog writing assistant who gathers context and delivers detailed, structured drafts.",
+    "questions": [
+      {
+        "id": "topic",
+        "label": "What is the main topic?",
+        "type": "text",
+        "placeholder": "e.g. AI for small business marketing",
+        "required": true,
+        "order": 1
+      },
+      {
+        "id": "audience",
+        "label": "Who is the target audience?",
+        "type": "text",
+        "placeholder": "e.g. startup founders",
+        "required": true,
+        "order": 2
+      },
+      {
+        "id": "tone",
+        "label": "Preferred tone",
+        "type": "select",
+        "options": ["Professional", "Conversational", "Playful", "Authoritative"],
+        "required": false,
+        "order": 3
+      }
+    ],
+    "searchSummary": "blog article writer long-form content marketing inbound seo outlines audience tone",
+    "keywords": ["blog", "article", "long form", "seo", "content marketing"]
+  },
+  {
+    "id": "static-sales-email-studio",
+    "title": "Sales Email Studio",
+    "category": "Sales Enablement",
+    "description": "Craft multi-touch outbound sequences, personalized cold emails, and follow-ups that convert.",
+    "active": true,
+    "featured": false,
+    "is_pro": true,
+    "primaryModel": "claude-3-sonnet",
+    "fallbackModels": ["gpt-4o-mini"],
+    "promptInstructions": "You are a revenue-focused copywriter who delivers concise, high-converting sales emails.",
+    "questions": [
+      {
+        "id": "offer",
+        "label": "What are you selling?",
+        "type": "textarea",
+        "placeholder": "Describe the product or service",
+        "required": true,
+        "order": 1
+      },
+      {
+        "id": "persona",
+        "label": "Who is the buyer persona?",
+        "type": "text",
+        "placeholder": "e.g. VP of Marketing at SaaS startups",
+        "required": true,
+        "order": 2
+      },
+      {
+        "id": "cta",
+        "label": "Desired call-to-action",
+        "type": "text",
+        "placeholder": "Book a discovery call",
+        "required": false,
+        "order": 3
+      }
+    ],
+    "searchSummary": "outbound email sequences cold outreach personalization follow up cadence conversion sales enablement",
+    "keywords": ["sales", "email", "outbound", "sequence", "prospecting"]
+  },
+  {
+    "id": "static-social-media-batch",
+    "title": "Social Media Batch Planner",
+    "category": "Social Media",
+    "description": "Plan and generate a month's worth of social posts with platform-specific copy and asset prompts.",
+    "active": true,
+    "featured": true,
+    "is_pro": false,
+    "primaryModel": "gpt-4o-mini",
+    "fallbackModels": ["claude-3-haiku"],
+    "promptInstructions": "You are a social strategist who balances brand voice with channel best practices.",
+    "questions": [
+      {
+        "id": "campaign",
+        "label": "Campaign or theme",
+        "type": "text",
+        "placeholder": "e.g. Spring product launch",
+        "required": true,
+        "order": 1
+      },
+      {
+        "id": "platforms",
+        "label": "Primary platforms",
+        "type": "select",
+        "options": ["LinkedIn", "Instagram", "TikTok", "Facebook", "X / Twitter"],
+        "required": true,
+        "order": 2
+      },
+      {
+        "id": "voice",
+        "label": "Brand voice",
+        "type": "text",
+        "placeholder": "Bold and playful",
+        "required": false,
+        "order": 3
+      }
+    ],
+    "searchSummary": "social media calendar batch planning multi platform captions assets scheduler brand voice community",
+    "keywords": ["social", "calendar", "posts", "instagram", "linkedin"]
+  }
+]

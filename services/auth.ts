@@ -351,6 +351,28 @@ export class AuthService {
       const { error } = await supabase.auth.signOut();
 
       if (error) {
+        // Check if the session is already not found on the server
+        const errorMessage = error.message?.toLowerCase() || '';
+        if (errorMessage.includes('session_not_found') || 
+            errorMessage.includes('session from session_id claim in jwt does not exist') ||
+            error.code === 'session_not_found') {
+          // Session already doesn't exist on server, just clear local state
+          useAuthStore.getState().clearAuth();
+          
+          const endTime = performance.now();
+          Logger.performance('auth_signout', endTime - startTime, { 
+            success: true, 
+            sessionAlreadyInvalid: true 
+          });
+          
+          Logger.info('Session already invalid on server, cleared local state', {
+            component: 'AuthService',
+            correlationId: Logger.getCorrelationId(),
+          });
+          
+          return;
+        }
+        
         throw error;
       }
 
@@ -362,6 +384,28 @@ export class AuthService {
 
       Logger.authSuccess('signout');
     } catch (error: any) {
+      // Double-check for session not found errors that might not be caught above
+      const errorMessage = error.message?.toLowerCase() || '';
+      if (errorMessage.includes('session_not_found') || 
+          errorMessage.includes('session from session_id claim in jwt does not exist') ||
+          error.code === 'session_not_found') {
+        // Session already doesn't exist, clear local state and return successfully
+        useAuthStore.getState().clearAuth();
+        
+        const endTime = performance.now();
+        Logger.performance('auth_signout', endTime - startTime, { 
+          success: true, 
+          sessionAlreadyInvalid: true 
+        });
+        
+        Logger.info('Session already invalid, logout completed', {
+          component: 'AuthService',
+          correlationId: Logger.getCorrelationId(),
+        });
+        
+        return;
+      }
+      
       const endTime = performance.now();
       const authError = this.mapSupabaseAuthError(error, 'signout');
       
