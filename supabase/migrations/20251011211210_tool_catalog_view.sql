@@ -1,4 +1,4 @@
--- Filename: 20251011211208_tool_catalog_view.sql
+-- Filename: 20251011211210_tool_catalog_view.sql
 -- Description: Creates/updates the tool_catalog view to expose active tools to all
 --              authenticated users, including aggregated question data. This version
 --              safely handles structural changes by dropping and recreating the view.
