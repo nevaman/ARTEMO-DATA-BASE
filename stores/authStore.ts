@@ -83,26 +83,29 @@ export const useAuthStore = create<AuthState>()(
 
         // Validate session before setting
         if (session && session.expires_at && session.expires_at < Date.now() / 1000) {
-          console.log('🔧 AUTH DIAGNOSTIC: Attempted to set expired session, rejecting');
-          Logger.warn('Attempted to set expired session', {
-            component: 'AuthStore',
-            expiresAt: session.expires_at,
-            currentTime: Date.now() / 1000,
-          });
-          
-          // Only clear if not in a refreshing state
-          const currentState = get();
-          if (currentState.sessionStatus !== 'refreshing') {
-            set({
-              user: null,
-              session: null,
-              isAuthenticated: false,
-              isLoading: false,
-              sessionStatus: 'unauthenticated',
-              refreshPromise: null,
+            console.log('🔧 AUTH DIAGNOSTIC: Attempted to set expired session, rejecting');
+            Logger.warn('Attempted to set expired session', {
+                component: 'AuthStore',
+                expiresAt: session.expires_at,
+                currentTime: Date.now() / 1000,
             });
-          }
-          return;
+
+            // If a refresh is in progress, don't clear the auth state, just return.
+            // The refresh mechanism will handle the session update.
+            if (get().sessionStatus === 'refreshing') {
+                return;
+            }
+
+            // If not refreshing, then clear the auth state as the session is invalid.
+            set({
+                user: null,
+                session: null,
+                isAuthenticated: false,
+                isLoading: false,
+                sessionStatus: 'unauthenticated',
+                refreshPromise: null,
+            });
+            return;
         }
 
         Logger.info('Auth state updated', {
