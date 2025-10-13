@@ -6,6 +6,7 @@ import { VectorSearchService, type SimilarTool } from '../services/vectorSearchS
 import { useAuthStore } from '../stores/authStore';
 import { useConfirmationDialog } from '../hooks/useConfirmationDialog';
 import { useNotifications } from '../contexts/NotificationContext';
+import { SupabaseApiService } from '../services/supabaseApi';
 import { ArrowLeftIcon, MessageSquareIcon, FolderIcon, BriefcaseIcon, PlusIcon, ChevronDownIcon, SearchIcon, MoreHorizontalIcon, EditIcon, TrashIcon } from './Icons';
 
 interface ProjectDetailViewProps {
