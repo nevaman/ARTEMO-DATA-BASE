@@ -61,3 +61,4 @@ GRANT USAGE ON SCHEMA public TO authenticated;
 GRANT SELECT ON public.tool_catalog TO authenticated;
 
 COMMIT;
+ 
