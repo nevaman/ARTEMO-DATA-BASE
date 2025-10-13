@@ -346,7 +346,7 @@ ANALYSIS: [detailed analysis explaining why this tool matches their needs and ho
       const analysisMatch = responseText.match(/ANALYSIS:\s*([\s\S]+)/);
 
       let recommendedTool: DynamicTool | null = null;
-      let analysis = analysisMatch ? analysisMatch[1].trim() : responseText;
+      let analysis = `This is the best recommended tool based on your query: '${userQuery}'.`;
 
       if (toolMatch) {
         const recommendedToolTitle = toolMatch[1].trim();
@@ -438,7 +438,7 @@ ANALYSIS: [detailed analysis explaining why this tool matches their needs and ho
     }));
 
     const analysis = local.recommendedTool
-      ? local.analysis
+      ? `This is the best recommended tool based on your query: '${userQuery}'.`
       : [local.analysis, reason].filter(Boolean).join(' — ');
 
     return {

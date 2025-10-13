@@ -187,9 +187,6 @@ export const DashboardView: React.FC<DashboardViewProps> = () => {
                         <p className="mt-4 text-xs sm:text-sm text-light-text-tertiary dark:text-dark-text-tertiary max-w-2xl mx-auto px-2">
                             <span className="font-semibold">Tip:</span> The more details you provide, the better the result. For example: <span className="italic">"a witty tweet about the challenges of remote work"</span>
                         </p>
-                        <div className="mt-2 text-[11px] sm:text-xs text-light-text-tertiary dark:text-dark-text-tertiary uppercase tracking-wide">
-                            Tool dataset: {datasetLabel}
-                        </div>
                     </div>
                     
                     {/* AI Analysis Results - Integrated into Hero Section */}
@@ -208,12 +205,6 @@ export const DashboardView: React.FC<DashboardViewProps> = () => {
                                         <h3 className="font-serif text-xl font-bold text-light-text-primary dark:text-dark-text-primary mb-4">
                                             AI Recommendation
                                         </h3>
-                                        {recommendationSource && (
-                                            <div className="mb-3 text-xs text-primary-accent font-medium uppercase tracking-wide">
-                                                {recommendationSource === 'supabase' ? 'Powered by Supabase vector search' : 'Powered by local demo engine'}
-                                                {provenance ? ` • ${provenance}` : ''}
-                                            </div>
-                                        )}
 
                                         {analysisResult && (
                                             <p className="text-sm text-light-text-secondary dark:text-dark-text-secondary mb-4 whitespace-pre-line">
@@ -254,23 +245,6 @@ export const DashboardView: React.FC<DashboardViewProps> = () => {
                                                 </div>
                                             </div>
                                         ) : null}
-
-                                        {similarTools.length > 0 && (
-                                            <div className="mt-4">
-                                                <h4 className="text-sm font-semibold text-light-text-secondary dark:text-dark-text-secondary uppercase tracking-wide mb-2">
-                                                    Other close matches
-                                                </h4>
-                                                <ul className="space-y-2">
-                                                    {similarTools.map(tool => (
-                                                        <li key={tool.tool_id} className="text-sm text-light-text-tertiary dark:text-dark-text-tertiary">
-                                                            <span className="font-medium text-light-text-secondary dark:text-dark-text-secondary">{tool.title}</span>
-                                                            <span className="ml-2">· {tool.category_name}</span>
-                                                            <span className="ml-2 text-xs">(score {(tool.similarity_score * 100).toFixed(1)}%)</span>
-                                                        </li>
-                                                    ))}
-                                                </ul>
-                                            </div>
-                                        )}
                                     </div>
                                 )}
                             </div>
