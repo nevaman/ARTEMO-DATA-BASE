@@ -15,6 +15,7 @@ export const ERROR_CODES = {
   AUTH_INVALID_TOKEN: 'AUTH_INVALID_TOKEN',
   AUTH_STATE_ERROR: 'AUTH_STATE_ERROR',
   AUTH_SUPABASE_NOT_CONFIGURED: 'AUTH_SUPABASE_NOT_CONFIGURED',
+  AUTH_SESSION_NOT_FOUND: 'AUTH_SESSION_NOT_FOUND',
 
   // API Errors
   API_TOOLS_FETCH_ERROR: 'API_TOOLS_FETCH_ERROR',
@@ -86,6 +87,7 @@ export const ERROR_SEVERITY_MAP: Record<ErrorCode, 'info' | 'warn' | 'error' | '
   AUTH_INVALID_TOKEN: 'warn',
   AUTH_STATE_ERROR: 'error',
   AUTH_SUPABASE_NOT_CONFIGURED: 'error',
+  AUTH_SESSION_NOT_FOUND: 'info',
 
   // API - errors that affect functionality
   API_TOOLS_FETCH_ERROR: 'error',
@@ -155,6 +157,7 @@ export const ERROR_MESSAGES: Record<ErrorCode, string> = {
   AUTH_INVALID_TOKEN: 'Invalid authentication token. Please sign in again.',
   AUTH_STATE_ERROR: 'Authentication error occurred. Please sign in again.',
   AUTH_SUPABASE_NOT_CONFIGURED: 'Backend not configured. Please contact support.',
+  AUTH_SESSION_NOT_FOUND: 'Session already ended. You have been logged out.',
 
   // API
   API_TOOLS_FETCH_ERROR: 'Failed to load tools. Please refresh the page or try again later.',
