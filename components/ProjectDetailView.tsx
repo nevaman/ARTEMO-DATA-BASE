@@ -2,8 +2,7 @@ import React, { useState, useEffect } from 'react';
 import type { Project, ChatHistoryItem } from '../types';
 import { useTools } from '../hooks/useTools';
 import { useChatHistory } from '../hooks/useChatHistory';
-import { SupabaseApiService } from '../services/supabaseApi';
-import { VectorSearchService } from '../services/vectorSearchService';
+import { VectorSearchService, type SimilarTool } from '../services/vectorSearchService';
 import { useAuthStore } from '../stores/authStore';
 import { useConfirmationDialog } from '../hooks/useConfirmationDialog';
 import { useNotifications } from '../contexts/NotificationContext';
@@ -99,8 +98,9 @@ const ToolRecommendationModal: React.FC<{
   const [recommendedTool, setRecommendedTool] = useState<any>(null);
   const [analysisResult, setAnalysisResult] = useState<string>('');
   const [tokensSaved, setTokensSaved] = useState<number>(0);
-  const [useVectorSearch, setUseVectorSearch] = useState(true);
-  const api = SupabaseApiService.getInstance();
+  const [similarTools, setSimilarTools] = useState<SimilarTool[]>([]);
+  const [recommendationSource, setRecommendationSource] = useState<'local' | 'supabase' | null>(null);
+  const [provenance, setProvenance] = useState('');
   const vectorService = VectorSearchService.getInstance();
   const textareaRef = React.useRef<HTMLTextAreaElement>(null);
 
@@ -131,104 +131,44 @@ const ToolRecommendationModal: React.FC<{
     onClose();
   };
   const analyzePromptAndRecommendTool = async (userPrompt: string) => {
-    if (!userPrompt.trim() || tools.length === 0) return;
-    
+    if (!userPrompt.trim()) {
+      setAnalysisResult('Please describe what you need so we can recommend a tool.');
+      return;
+    }
+
     setIsAnalyzing(true);
     setRecommendedTool(null);
     setAnalysisResult('');
     setTokensSaved(0);
-    
+    setSimilarTools([]);
+    setRecommendationSource(null);
+    setProvenance('');
+
     try {
-      if (useVectorSearch) {
-        // Use optimized vector search approach
-        const response = await vectorService.getOptimizedToolRecommendation(userPrompt);
-        
-        if (response.success && response.data) {
-          const { recommendedTool: foundTool, analysis, tokensSaved: saved } = response.data;
-          
-          if (foundTool) {
-            setRecommendedTool(foundTool);
-            setAnalysisResult(analysis);
-            setTokensSaved(saved);
-          } else {
-            setAnalysisResult(analysis);
-          }
-        } else {
-          // Vector search failed, try legacy search as fallback
-          console.warn('Vector search failed in project modal, attempting legacy search:', response.error);
-          setUseVectorSearch(false);
-          
-          // Fall through to legacy search
-          await performLegacySearch(userPrompt);
+      const response = await vectorService.getOptimizedToolRecommendation(userPrompt);
+
+      if (response.success && response.data) {
+        const { recommendedTool: foundTool, analysis, tokensSaved: saved, similarTools: related, source, provenance: provenanceLabel } = response.data;
+
+        setAnalysisResult(analysis);
+        setTokensSaved(saved ?? 0);
+        setSimilarTools(related ?? []);
+        setRecommendationSource(source);
+        setProvenance(provenanceLabel ?? '');
+
+        if (foundTool) {
+          setRecommendedTool(foundTool);
         }
       } else {
-        // Use legacy search
-        await performLegacySearch(userPrompt);
+        setAnalysisResult(response.error || 'AI recommendation service is temporarily unavailable.');
+        setRecommendationSource(null);
       }
     } catch (error) {
       console.error('Failed to analyze prompt:', error);
-      setAnalysisResult('Unable to analyze your request at the moment. Please try selecting a tool manually from the categories below, or try again in a few minutes.');
+      setAnalysisResult('AI recommendation service is temporarily unavailable. Please try again shortly.');
+      setRecommendationSource(null);
     } finally {
       setIsAnalyzing(false);
-    }
-  };
-
-  const performLegacySearch = async (userPrompt: string) => {
-    try {
-      const systemPrompt = `You are an AI assistant that analyzes user requests and recommends the most appropriate copywriting tool from a list of available tools.
-
-Available tools:
-${tools.map(tool => `- **${tool.title}** (${tool.category}): ${tool.description}`).join('\n')}
-
-User request: "${userPrompt}"
-
-Please analyze the user's request thoroughly and:
-1. Identify the specific type of content they want to create
-2. Consider the target audience, tone, and purpose implied in their request
-3. Match their needs against both the tool titles AND detailed descriptions above
-4. Recommend the MOST APPROPRIATE tool that best fits their specific requirements
-5. Explain why this tool is the perfect match, referencing specific capabilities from the tool's description
-6. Provide actionable insights about their content creation goal
-
-Respond in this format:
-RECOMMENDED_TOOL: [exact tool title from the list]
-ANALYSIS: [detailed analysis explaining why this tool matches their needs, what specific capabilities make it ideal, and how it will help them achieve their content goals]`;
-
-      const response = await api.sendChatMessage('tool-recommendation', [
-        { id: '1', sender: 'user', text: systemPrompt }
-      ]);
-      
-      if (response.success && response.data) {
-        const responseText = response.data;
-        
-        const toolMatch = responseText.match(/RECOMMENDED_TOOL:\s*(.+?)(?:\n|$)/);
-        const analysisMatch = responseText.match(/ANALYSIS:\s*([\s\S]+)/);
-        
-        if (toolMatch && analysisMatch) {
-          const recommendedToolTitle = toolMatch[1].trim();
-          const analysis = analysisMatch[1].trim();
-          
-          const foundTool = tools.find(tool => 
-            tool.title.toLowerCase() === recommendedToolTitle.toLowerCase() ||
-            tool.title.includes(recommendedToolTitle) ||
-            recommendedToolTitle.includes(tool.title)
-          );
-          
-          if (foundTool) {
-            setRecommendedTool(foundTool);
-            setAnalysisResult(analysis);
-          } else {
-            setAnalysisResult(responseText);
-          }
-        } else {
-          setAnalysisResult(responseText);
-        }
-      } else {
-        throw new Error(response.error || 'AI service temporarily unavailable');
-      }
-    } catch (error: any) {
-      console.error('Legacy search failed:', error);
-      setAnalysisResult('AI recommendation service is temporarily unavailable. Please browse our tool categories below to find the right tool for your needs, or try again in a few minutes.');
     }
   };
 
@@ -309,7 +249,20 @@ ANALYSIS: [detailed analysis explaining why this tool matches their needs, what 
                   <h4 className="font-serif text-lg font-bold text-light-text-primary dark:text-dark-text-primary mb-4">
                     AI Recommendation
                   </h4>
-                  
+
+                  {recommendationSource && (
+                    <div className="mb-3 text-xs text-primary-accent font-medium uppercase tracking-wide">
+                      {recommendationSource === 'supabase' ? 'Powered by Supabase vector search' : 'Powered by local demo engine'}
+                      {provenance ? ` • ${provenance}` : ''}
+                    </div>
+                  )}
+
+                  {analysisResult && (
+                    <p className="text-sm text-light-text-secondary dark:text-dark-text-secondary mb-4 whitespace-pre-line">
+                      {analysisResult}
+                    </p>
+                  )}
+
                   {recommendedTool ? (
                     <div className="space-y-4">
                       <div className="bg-primary-accent/10 border border-primary-accent/20 rounded-lg p-4">
@@ -331,6 +284,9 @@ ANALYSIS: [detailed analysis explaining why this tool matches their needs, what 
                             </p>
                           </div>
                         </div>
+                        <p className="text-sm text-light-text-secondary dark:text-dark-text-secondary mb-4">
+                          {recommendedTool.description}
+                        </p>
                         <button
                           onClick={handleUseRecommendedTool}
                           className="w-full bg-primary-accent text-text-on-accent py-2 px-4 rounded-md hover:opacity-85 transition-opacity"
@@ -338,42 +294,25 @@ ANALYSIS: [detailed analysis explaining why this tool matches their needs, what 
                           Use {recommendedTool.title}
                         </button>
                       </div>
-                      {useVectorSearch && tokensSaved > 0 && (
-                        <div className="mt-4 p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
-                          <div className="flex items-center justify-between text-sm">
-                            <span className="text-blue-800 dark:text-blue-200">
-                              🎯 Vector search found relevant tools efficiently
-                            </span>
-                            <button
-                              onClick={() => setUseVectorSearch(false)}
-                              className="text-blue-600 dark:text-blue-400 hover:underline text-xs"
-                            >
-                              Try legacy search
-                            </button>
-                          </div>
-                        </div>
-                      )}
-                      {!useVectorSearch && (
-                        <div className="mt-4 p-3 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg">
-                          <div className="flex items-center justify-between text-sm">
-                            <span className="text-yellow-800 dark:text-yellow-200">
-                              ⚠️ Using legacy search (higher token usage)
-                            </span>
-                            <button
-                              onClick={() => setUseVectorSearch(true)}
-                              className="text-yellow-600 dark:text-yellow-400 hover:underline text-xs"
-                            >
-                              Switch to vector search
-                            </button>
-                          </div>
-                        </div>
-                      )}
                     </div>
-                  ) : analysisResult ? (
-                    <p className="text-light-text-secondary dark:text-dark-text-secondary">
-                      {analysisResult}
-                    </p>
                   ) : null}
+
+                  {similarTools.length > 0 && (
+                    <div className="mt-4">
+                      <h5 className="text-sm font-semibold text-light-text-secondary dark:text-dark-text-secondary uppercase tracking-wide mb-2">
+                        Other close matches
+                      </h5>
+                      <ul className="space-y-2">
+                        {similarTools.map(tool => (
+                          <li key={tool.tool_id} className="text-sm text-light-text-tertiary dark:text-dark-text-tertiary">
+                            <span className="font-medium text-light-text-secondary dark:text-dark-text-secondary">{tool.title}</span>
+                            <span className="ml-2">· {tool.category_name}</span>
+                            <span className="ml-2 text-xs">(score {(tool.similarity_score * 100).toFixed(1)}%)</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
                 </div>
               )}
             </div>

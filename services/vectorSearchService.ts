@@ -1,8 +1,10 @@
-import { supabase, handleSupabaseError } from '../lib/supabase';
+import { supabase, handleSupabaseError, isSupabaseAvailable } from '../lib/supabase';
 import { Logger } from '../utils/logger';
 import type { DynamicTool, ApiResponse } from '../types';
+import { RecommendationEngine } from './recommendationEngine';
+import { ToolRepository } from './toolRepository';
 
-interface SimilarTool {
+export interface SimilarTool {
   tool_id: string;
   title: string;
   description: string;
@@ -10,8 +12,21 @@ interface SimilarTool {
   similarity_score: number;
 }
 
+type RecommendationSource = 'supabase' | 'local';
+
+interface RecommendationPayload {
+  recommendedTool: DynamicTool | null;
+  analysis: string;
+  similarTools: SimilarTool[];
+  tokensSaved: number;
+  source: RecommendationSource;
+  provenance: string;
+}
+
 export class VectorSearchService {
   private static instance: VectorSearchService;
+  private recommendationEngine = RecommendationEngine.getInstance();
+  private repository = ToolRepository.getInstance();
   
   static getInstance(): VectorSearchService {
     if (!VectorSearchService.instance) {
@@ -24,8 +39,8 @@ export class VectorSearchService {
    * Generate embeddings for all tools that don't have them yet
    */
   async generateToolEmbeddings(): Promise<ApiResponse<{ processed: number; skipped: number }>> {
-    if (!supabase) {
-      return { success: false, error: 'Supabase not connected' };
+    if (!supabase || !isSupabaseAvailable()) {
+      return { success: true, data: { processed: 0, skipped: 0 } };
     }
 
     try {
@@ -147,8 +162,16 @@ export class VectorSearchService {
     maxResults: number = 5,
     similarityThreshold: number = 0.6
   ): Promise<ApiResponse<SimilarTool[]>> {
-    if (!supabase) {
-      return { success: false, error: 'Supabase not connected' };
+    if (!supabase || !isSupabaseAvailable()) {
+      const local = await this.recommendationEngine.getRecommendation(userQuery);
+      const similar = local.scores.slice(0, maxResults).map(score => ({
+        tool_id: score.tool.id,
+        title: score.tool.title,
+        description: score.tool.description,
+        category_name: score.tool.category,
+        similarity_score: score.similarity,
+      }));
+      return { success: true, data: similar };
     }
 
     try {
@@ -239,14 +262,23 @@ export class VectorSearchService {
   /**
    * Get optimized tool recommendation using vector search
    */
-  async getOptimizedToolRecommendation(userQuery: string): Promise<ApiResponse<{
-    recommendedTool: DynamicTool | null;
-    analysis: string;
-    similarTools: SimilarTool[];
-    tokensSaved: number;
-  }>> {
-    if (!supabase) {
-      return { success: false, error: 'Supabase not connected' };
+  async getOptimizedToolRecommendation(userQuery: string): Promise<ApiResponse<RecommendationPayload>> {
+    if (!userQuery.trim()) {
+      return {
+        success: true,
+        data: {
+          recommendedTool: null,
+          analysis: 'Please describe what you want to create so we can recommend the right tool.',
+          similarTools: [],
+          tokensSaved: 0,
+          source: 'local',
+          provenance: 'Input validation',
+        },
+      };
+    }
+
+    if (!supabase || !isSupabaseAvailable()) {
+      return this.buildLocalRecommendation(userQuery, 'Supabase client not configured');
     }
 
     try {
@@ -257,7 +289,6 @@ export class VectorSearchService {
         queryPreview: userQuery.substring(0, 100),
       });
 
-      // Step 1: Use vector search to find similar tools
       const similarToolsResponse = await this.findSimilarTools(userQuery, 5, 0.6);
 
       Logger.info('Received response from findSimilarTools', {
@@ -266,61 +297,17 @@ export class VectorSearchService {
         dataLength: similarToolsResponse.data?.length || 0,
         hasError: !!similarToolsResponse.error,
       });
-      
-      if (!similarToolsResponse.success) {
-        Logger.error({
-          message: 'Vector search failed, returning fallback response',
-          code: 'VECTOR_SEARCH_FAILED',
-          details: similarToolsResponse.error || 'Unknown error',
-          timestamp: new Date().toISOString(),
-          correlationId: Logger.getCorrelationId(),
-          component: 'VectorSearchService',
-          severity: 'warning',
-        });
 
-        // If vector search fails, return graceful fallback
-        return {
-          success: true,
-          data: {
-            recommendedTool: null,
-            analysis: 'Vector search is currently unavailable. Please try the legacy search method or contact support.',
-            similarTools: [],
-            tokensSaved: 0
-          }
-        };
+      if (!similarToolsResponse.success) {
+        return this.buildLocalRecommendation(userQuery, similarToolsResponse.error);
       }
 
-      const similarTools = similarToolsResponse.data;
-
-      Logger.info('Similar tools retrieved successfully', {
-        component: 'VectorSearchService',
-        toolsCount: similarTools.length,
-        tools: similarTools.map(t => ({
-          id: t.tool_id,
-          title: t.title,
-          category: t.category_name,
-          similarity: t.similarity_score,
-        })),
-      });
+      const similarTools = similarToolsResponse.data || [];
 
       if (similarTools.length === 0) {
-        Logger.info('No similar tools found for query', {
-          component: 'VectorSearchService',
-          queryLength: userQuery.length,
-        });
-
-        return {
-          success: true,
-          data: {
-            recommendedTool: null,
-            analysis: 'No suitable tools found for your request. Please try rephrasing or browse our tool categories.',
-            similarTools: [],
-            tokensSaved: 0
-          }
-        };
+        return this.buildLocalRecommendation(userQuery, 'Vector index returned no matches');
       }
 
-      // Step 2: Create optimized prompt with only relevant tools
       const optimizedPrompt = `You are an AI assistant that analyzes user requests and recommends the most appropriate copywriting tool from a curated list of relevant tools.
 
 Relevant tools (pre-filtered using semantic similarity):
@@ -339,18 +326,6 @@ Respond in this format:
 RECOMMENDED_TOOL: [exact tool title from the list]
 ANALYSIS: [detailed analysis explaining why this tool matches their needs and how it will help them achieve their content goals]`;
 
-      Logger.info('Created optimized prompt for AI', {
-        component: 'VectorSearchService',
-        promptLength: optimizedPrompt.length,
-        includedToolsCount: similarTools.length,
-      });
-
-      // Step 3: Send optimized prompt to AI
-      Logger.info('Invoking ai-chat edge function', {
-        component: 'VectorSearchService',
-        toolId: 'tool-recommendation-optimized',
-      });
-
       const { data: aiResponse, error: aiError } = await supabase.functions.invoke('ai-chat', {
         body: {
           toolId: 'tool-recommendation-optimized',
@@ -359,154 +334,29 @@ ANALYSIS: [detailed analysis explaining why this tool matches their needs and ho
         }
       });
 
-      Logger.info('Received response from ai-chat edge function', {
-        component: 'VectorSearchService',
-        hasError: !!aiError,
-        hasResponse: !!aiResponse?.response,
-        responseLength: aiResponse?.response?.length || 0,
-      });
-
       if (aiError || !aiResponse?.response) {
-        Logger.error({
-          message: 'AI service unavailable, falling back to basic recommendation',
-          code: 'AI_SERVICE_ERROR',
-          details: aiError?.message || 'No response from AI',
-          timestamp: new Date().toISOString(),
-          correlationId: Logger.getCorrelationId(),
-          component: 'VectorSearchService',
-          severity: 'warning',
+        Logger.warn('VectorSearchService: ai-chat invocation failed, using local fallback', {
+          error: aiError?.message || 'No response',
         });
-        
-        // Return the top similar tool as fallback
-        if (similarTools.length > 0) {
-          const topTool = similarTools[0];
-
-          Logger.info('Using fallback: fetching top similar tool from database', {
-            component: 'VectorSearchService',
-            toolId: topTool.tool_id,
-            toolTitle: topTool.title,
-          });
-
-          const { data: fullTool, error: toolError } = await supabase
-            .from('tools')
-            .select(`
-              *,
-              category:categories(*),
-              questions:tool_questions(*)
-            `)
-            .eq('id', topTool.tool_id)
-            .single();
-
-          Logger.info('Fallback tool fetch result', {
-            component: 'VectorSearchService',
-            hasError: !!toolError,
-            hasData: !!fullTool,
-            toolTitle: fullTool?.title,
-          });
-
-          if (!toolError && fullTool) {
-            const recommendedTool = {
-              id: fullTool.id,
-              title: fullTool.title,
-              category: fullTool.category?.name || 'Other',
-              description: fullTool.description,
-              active: fullTool.active,
-              featured: fullTool.featured,
-              primaryModel: fullTool.primary_model,
-              fallbackModels: fullTool.fallback_models || [],
-              promptInstructions: fullTool.prompt_instructions,
-              questions: (fullTool.questions || [])
-                .sort((a: any, b: any) => a.question_order - b.question_order)
-                .map((q: any) => ({
-                  id: q.id,
-                  label: q.label,
-                  type: q.type,
-                  placeholder: q.placeholder,
-                  required: q.required,
-                  order: q.question_order,
-                  options: q.options,
-                })),
-            };
-
-            return {
-              success: true,
-              data: {
-                recommendedTool,
-                analysis: `Based on semantic similarity, "${topTool.title}" appears to be the best match for your request. This tool specializes in ${topTool.category_name.toLowerCase()} and should help you create the content you're looking for.`,
-                similarTools,
-                tokensSaved: 0
-              }
-            };
-          }
-        }
-        
-        // If we can't get tool details, return basic info
-        return {
-          success: true,
-          data: {
-            recommendedTool: null,
-            analysis: 'AI recommendation service is temporarily unavailable. Please try selecting a tool manually from the categories below, or try again in a few minutes.',
-            similarTools,
-            tokensSaved: 0
-          }
-        };
+        return this.buildLocalRecommendation(userQuery, aiError?.message || 'AI response missing');
       }
 
-      // Step 4: Parse AI response
       const responseText = aiResponse.response;
-
-      Logger.info('Parsing AI response', {
-        component: 'VectorSearchService',
-        responseLength: responseText.length,
-        responsePreview: responseText.substring(0, 200),
-      });
-
       const toolMatch = responseText.match(/RECOMMENDED_TOOL:\s*(.+?)(?:\n|$)/);
       const analysisMatch = responseText.match(/ANALYSIS:\s*([\s\S]+)/);
 
-      Logger.info('Extracted data from AI response', {
-        component: 'VectorSearchService',
-        hasToolMatch: !!toolMatch,
-        hasAnalysisMatch: !!analysisMatch,
-        recommendedToolTitle: toolMatch?.[1]?.trim() || 'None',
-      });
-
       let recommendedTool: DynamicTool | null = null;
-      let analysis = responseText;
+      let analysis = analysisMatch ? analysisMatch[1].trim() : responseText;
 
-      if (toolMatch && analysisMatch) {
+      if (toolMatch) {
         const recommendedToolTitle = toolMatch[1].trim();
-        analysis = analysisMatch[1].trim();
-
-        Logger.info('Successfully parsed AI recommendation', {
-          component: 'VectorSearchService',
-          recommendedToolTitle,
-          analysisLength: analysis.length,
-        });
-
-        // Find the recommended tool in our similar tools list
         const foundSimilarTool = similarTools.find(tool =>
           tool.title.toLowerCase() === recommendedToolTitle.toLowerCase() ||
           tool.title.includes(recommendedToolTitle) ||
           recommendedToolTitle.includes(tool.title)
         );
 
-        Logger.info('Searching for recommended tool in similar tools list', {
-          component: 'VectorSearchService',
-          recommendedToolTitle,
-          found: !!foundSimilarTool,
-          foundToolId: foundSimilarTool?.tool_id,
-          foundToolTitle: foundSimilarTool?.title,
-        });
-
         if (foundSimilarTool) {
-          Logger.info('Fetching full tool data from database', {
-            component: 'VectorSearchService',
-            toolId: foundSimilarTool.tool_id,
-            toolTitle: foundSimilarTool.title,
-          });
-
-          // Fetch full tool data
           const { data: fullTool, error: toolError } = await supabase
             .from('tools')
             .select(`
@@ -516,15 +366,6 @@ ANALYSIS: [detailed analysis explaining why this tool matches their needs and ho
             `)
             .eq('id', foundSimilarTool.tool_id)
             .single();
-
-          Logger.info('Full tool fetch result', {
-            component: 'VectorSearchService',
-            hasError: !!toolError,
-            errorMessage: toolError?.message,
-            hasData: !!fullTool,
-            toolTitle: fullTool?.title,
-            questionsCount: fullTool?.questions?.length || 0,
-          });
 
           if (!toolError && fullTool) {
             recommendedTool = {
@@ -549,38 +390,22 @@ ANALYSIS: [detailed analysis explaining why this tool matches their needs and ho
                   options: q.options,
                 })),
             };
+          } else {
+            const fallbackTool = await this.repository.getToolById(foundSimilarTool.tool_id);
+            if (fallbackTool) {
+              recommendedTool = fallbackTool;
+            }
           }
         }
       }
 
-      // Calculate tokens saved (rough estimate)
+      if (!recommendedTool) {
+        return this.buildLocalRecommendation(userQuery, 'LLM response missing actionable tool reference');
+      }
+
       const originalTokens = await this.estimateTokens(userQuery, await this.getAllToolsForEstimate());
       const optimizedTokens = await this.estimateTokens(userQuery, similarTools);
       const tokensSaved = Math.max(0, originalTokens - optimizedTokens);
-
-      Logger.info('Optimized tool recommendation completed', {
-        component: 'VectorSearchService',
-        queryLength: userQuery.length,
-        similarToolsFound: similarTools.length,
-        recommendedTool: recommendedTool?.title || 'None',
-        recommendedToolId: recommendedTool?.id || 'None',
-        hasAnalysis: !!analysis,
-        analysisLength: analysis.length,
-        tokensSaved,
-      });
-
-      Logger.info('Final recommendation object being returned', {
-        component: 'VectorSearchService',
-        result: {
-          hasRecommendedTool: !!recommendedTool,
-          toolId: recommendedTool?.id,
-          toolTitle: recommendedTool?.title,
-          toolCategory: recommendedTool?.category,
-          questionsCount: recommendedTool?.questions?.length || 0,
-          similarToolsCount: similarTools.length,
-          analysisPreview: analysis.substring(0, 100),
-        },
-      });
 
       return {
         success: true,
@@ -588,23 +413,45 @@ ANALYSIS: [detailed analysis explaining why this tool matches their needs and ho
           recommendedTool,
           analysis,
           similarTools,
-          tokensSaved
-        }
+          tokensSaved,
+          source: 'supabase',
+          provenance: 'Supabase vector search',
+        },
       };
 
     } catch (error: any) {
-      Logger.error({
-        message: 'Vector search recommendation failed',
-        code: 'VECTOR_SEARCH_ERROR',
-        details: error.message,
-        timestamp: new Date().toISOString(),
-        correlationId: Logger.getCorrelationId(),
-        component: 'VectorSearchService',
-        severity: 'error',
+      Logger.warn('VectorSearchService: Supabase pipeline failed, using local recommendation', {
+        error: error.message,
       });
-
-      return { success: false, error: error.message };
+      return this.buildLocalRecommendation(userQuery, error.message);
     }
+  }
+
+  private async buildLocalRecommendation(userQuery: string, reason?: string): Promise<ApiResponse<RecommendationPayload>> {
+    const local = await this.recommendationEngine.getRecommendation(userQuery);
+    const similarTools: SimilarTool[] = local.scores.slice(0, 5).map(score => ({
+      tool_id: score.tool.id,
+      title: score.tool.title,
+      description: score.tool.description,
+      category_name: score.tool.category,
+      similarity_score: score.similarity,
+    }));
+
+    const analysis = local.recommendedTool
+      ? local.analysis
+      : [local.analysis, reason].filter(Boolean).join(' — ');
+
+    return {
+      success: true,
+      data: {
+        recommendedTool: local.recommendedTool,
+        analysis,
+        similarTools,
+        tokensSaved: 0,
+        source: 'local',
+        provenance: local.sourceLabel,
+      },
+    };
   }
 
   private async generateContentHash(content: string): Promise<string> {

@@ -1,67 +1,41 @@
 import { useState, useEffect } from 'react';
 import { SupabaseApiService } from '../services/supabaseApi';
+import { ToolRepository, type ToolDataSource } from '../services/toolRepository';
 import { Logger } from '../utils/logger';
-import { ErrorHandler } from '../utils/errorHandler';
 import { useConfirmDialog } from '../contexts/DialogContext';
 import { useNotifications } from '../contexts/NotificationContext';
-import type { DynamicTool, ToolsApiResponse } from '../types';
+import type { DynamicTool } from '../types';
 
 export const useTools = () => {
-  const [tools, setTools] = useState<DynamicTool[]>([]);
+  const [rawTools, setRawTools] = useState<DynamicTool[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [dataSource, setDataSource] = useState<ToolDataSource>('static');
 
   const api = SupabaseApiService.getInstance();
+  const repository = ToolRepository.getInstance();
   const dialog = useConfirmDialog();
   const notifications = useNotifications();
 
-  const fetchTools = async () => {
-
+  const fetchTools = async (options: { allowStale?: boolean } = {}) => {
     try {
       setLoading(true);
       setError(null);
-      
-      const response = await ErrorHandler.withRetry(
-        () => api.getAllTools(), // Changed to get ALL tools including inactive ones
-        3,
-        1000,
-        { component: 'useTools', operation: 'fetchTools' }
-      );
-      
-      if (response.success && response.data) {
-        setTools(response.data);
-      } else {
-        const errorResponse = ErrorHandler.createError(
-          'API_TOOLS_FETCH_ERROR',
-          response.error || 'Failed to fetch tools',
-          'useTools'
-        );
-        // Don't treat network errors or auth refresh errors as critical
-        if (response.error?.includes('Failed to fetch') || 
-            response.error?.includes('Network error') ||
-            response.error?.includes('session is not stable')) {
-          console.log('useTools: Network error, Supabase likely not configured');
-          setTools([]);
-        } else {
-          ErrorHandler.handleError(errorResponse);
-          setError(errorResponse.message);
-        }
-      }
-    } catch (error: any) {
-      // Handle network errors gracefully
-      const errorMessage = error.message || 'Unknown error';
-      if (errorMessage.includes('Failed to fetch') || 
-          errorMessage.includes('TypeError') ||
-          errorMessage.includes('session is not stable')) {
-        console.log('useTools: Network error, Supabase likely not configured');
-        setTools([]);
-      } else {
-        const errorResponse = ErrorHandler.handleError(error, {
-          component: 'useTools',
-          operation: 'fetchTools',
-        });
-        setError(errorResponse.message);
-      }
+
+      const { tools, source } = await repository.getTools({ allowStale: options.allowStale ?? true });
+      setRawTools(tools);
+      setDataSource(source);
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to load tools';
+      Logger.error({
+        message: 'Tool repository failed to hydrate tools',
+        code: 'TOOL_REPOSITORY_ERROR',
+        details: errorMessage,
+        component: 'useTools',
+        severity: 'error',
+      });
+      setError(errorMessage);
+      setRawTools([]);
     } finally {
       setLoading(false);
     }
@@ -69,21 +43,22 @@ export const useTools = () => {
 
   useEffect(() => {
     fetchTools();
-  }, [api]);
+  }, []);
 
   const createTool = async (toolData: Omit<DynamicTool, 'id'>) => {
     try {
       const response = await api.createTool(toolData);
       if (response.success && response.data) {
         notifications.success('Tool created successfully!');
-        await fetchTools();
+        repository.invalidateCache();
+        await fetchTools({ allowStale: false });
         return response.data;
-      } else {
-        throw new Error(response.error || 'Failed to create tool');
       }
-    } catch (error) {
-      notifications.error(`Failed to create tool: ${error instanceof Error ? error.message : 'Unknown error'}`);
-      throw error;
+
+      throw new Error(response.error || 'Failed to create tool');
+    } catch (err) {
+      notifications.error(`Failed to create tool: ${err instanceof Error ? err.message : 'Unknown error'}`);
+      throw err;
     }
   };
 
@@ -92,14 +67,15 @@ export const useTools = () => {
       const response = await api.updateTool(id, updates);
       if (response.success && response.data) {
         notifications.success('Tool updated successfully.');
-        await fetchTools();
+        repository.invalidateCache();
+        await fetchTools({ allowStale: false });
         return response.data;
-      } else {
-        throw new Error(response.error || 'Failed to update tool');
       }
-    } catch (error) {
-      notifications.error(`Failed to update tool: ${error instanceof Error ? error.message : 'Unknown error'}`);
-      throw error;
+
+      throw new Error(response.error || 'Failed to update tool');
+    } catch (err) {
+      notifications.error(`Failed to update tool: ${err instanceof Error ? err.message : 'Unknown error'}`);
+      throw err;
     }
   };
 
@@ -118,31 +94,31 @@ export const useTools = () => {
       const response = await api.deleteTool(id);
       if (response.success) {
         notifications.success('Tool deleted successfully.');
-        await fetchTools();
+        repository.invalidateCache();
+        await fetchTools({ allowStale: false });
       } else {
         throw new Error(response.error || 'Failed to delete tool');
       }
-    } catch (error) {
-      notifications.error(`Failed to delete tool: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } catch (err) {
+      notifications.error(`Failed to delete tool: ${err instanceof Error ? err.message : 'Unknown error'}`);
     }
   };
 
-  // Computed values
-  const activeTools = tools.filter(tool => tool.active);
-  const featuredTools = tools.filter(tool => tool.active && tool.featured);
-  const toolsByCategory = (category: string) => 
-    activeTools.filter(tool => tool.category === category);
+  const activeTools = rawTools.filter(tool => tool.active);
+  const featuredTools = rawTools.filter(tool => tool.active && tool.featured);
+  const toolsByCategory = (category: string) => activeTools.filter(tool => tool.category === category);
 
   return {
     tools: activeTools,
-    allTools: tools,
+    allTools: rawTools,
     featuredTools,
     toolsByCategory,
     loading,
     error,
-    refetch: fetchTools,
+    dataSource,
+    refetch: (options?: { allowStale?: boolean }) => fetchTools(options),
     createTool,
     updateTool,
-    deleteTool
+    deleteTool,
   };
 };
