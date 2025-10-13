@@ -9,7 +9,7 @@ BEGIN;
 -- Section 1: Enable RLS on the `tool_catalog` view
 ALTER VIEW public.tool_catalog OWNER TO postgres;
 ALTER TABLE public.tool_catalog ENABLE ROW LEVEL SECURITY;
-
+ 
 -- Section 2: Define RLS policies for the `tool_catalog` view
 
 -- Policy 1: Allow any authenticated user to view active tools in the catalog.
