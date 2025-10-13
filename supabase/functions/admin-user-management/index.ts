@@ -180,6 +180,49 @@ Deno.serve(async (req: Request) => {
         });
         break;
 
+      case 'update_role':
+        console.log(`[update_role] Updating role for user: ${userId} to ${reason}`);
+        
+        // Get current user data for audit trail
+        const { data: currentUser, error: getCurrentError } = await supabase
+          .from('user_profiles')
+          .select('role')
+          .eq('id', userId)
+          .single();
+        
+        if (getCurrentError) {
+          console.error('[update_role] Error fetching current user:', getCurrentError);
+          throw new Error(`Failed to fetch current user data: ${getCurrentError.message}`);
+        }
+        
+        // Update the user's role
+        const { error: updateRoleError } = await supabase
+          .from('user_profiles')
+          .update({ 
+            role: reason, // reason parameter contains the new role
+            status_updated_by: requestingUser.id,
+            status_updated_at: new Date().toISOString()
+          })
+          .eq('id', userId);
+        
+        if (updateRoleError) {
+          console.error('[update_role] Error updating user role:', updateRoleError);
+          throw new Error(`Failed to update user role: ${updateRoleError.message}`);
+        }
+        
+        // Log the role change to audit table
+        await supabase.from('user_management_audit').insert({
+          target_user_id: userId,
+          admin_user_id: requestingUser.id,
+          action_type: 'role_change',
+          old_value: { role: currentUser.role },
+          new_value: { role: reason },
+          reason: `Role changed from ${currentUser.role} to ${reason} by admin`,
+        });
+        
+        console.log(`[update_role] Successfully updated user role from ${currentUser.role} to ${reason}`);
+        break;
+
       default:
         throw new Error(`Invalid action received: ${action}`);
     }

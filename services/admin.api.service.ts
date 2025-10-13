@@ -467,31 +467,23 @@ export class AdminApiService {
     }
 
     try {
-      // Get current admin user ID
-      const { data: { user: currentUser } } = await supabase.auth.getUser();
-      if (!currentUser) {
-        throw new Error('Admin user not authenticated');
-      }
-
-      // Call the database function for role update with audit trail
-      const { error } = await supabase.rpc('update_user_role', {
-        target_user_id: userId,
-        new_role: role,
-        admin_user_id: currentUser.id,
-        reason: reason || 'Role updated by admin'
+      // Use the Edge Function for role updates
+      const { data, error } = await supabase.functions.invoke('admin-user-management', {
+        body: {
+          action: 'update_role',
+          userId: userId,
+          reason: role, // Pass the new role as reason parameter
+        }
       });
 
       if (error) {
         throw error;
       }
-
-      Logger.info('User role updated successfully', {
-        component: 'AdminApiService',
-        targetUserId: userId,
-        newRole: role,
-        adminUserId: currentUser.id,
-      });
       
+      if (data?.error) {
+        throw new Error(data.error);
+      }
+
       return { success: true };
     } catch (error: any) {
       const errorResponse = handleSupabaseError(error, 'updateUserRole', { userId, role });
