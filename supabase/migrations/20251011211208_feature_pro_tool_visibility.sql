@@ -1,4 +1,4 @@
--- Filename: 20251012132530_feature_pro_tool_visibility.sql
+-- Filename: 20251011211208_feature_pro_tool_visibility.sql
 -- Feature: Pro Tool Visibility Gap
 -- Description: This migration creates a read-only view `tool_catalog` to safely
 --              expose a subset of tool data to all users. This allows non-pro
