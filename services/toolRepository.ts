@@ -118,21 +118,49 @@ export class ToolRepository {
     }
 
     if (isSupabaseAvailable()) {
+      let adminFetchError: string | undefined;
+
       try {
         const response = await this.api.getAllTools();
-        if (response.success && response.data) {
+        if (response.success && response.data && response.data.length > 0) {
           this.cache = response.data;
           this.cacheSource = 'supabase';
           this.rebuildSearchDocuments(response.data, 'supabase');
           return { tools: response.data, source: 'supabase' };
         }
 
-        Logger.warn('ToolRepository: Falling back to static dataset after Supabase error', {
-          error: response.error,
+        adminFetchError = response.error || 'No tools returned from admin endpoint';
+        Logger.warn('ToolRepository: Admin tools endpoint returned no data, attempting app endpoint fallback', {
+          error: adminFetchError,
         });
       } catch (error) {
-        Logger.warn('ToolRepository: Supabase fetch failed, using static dataset', {
-          error: error instanceof Error ? error.message : 'Unknown error',
+        adminFetchError = error instanceof Error ? error.message : 'Unknown error';
+        Logger.warn('ToolRepository: Admin tools fetch failed, attempting app endpoint fallback', {
+          error: adminFetchError,
+        });
+      }
+
+      try {
+        const fallbackResponse = await this.api.getTools();
+        if (fallbackResponse.success && fallbackResponse.data) {
+          if (adminFetchError) {
+            Logger.info('ToolRepository: Fetched tools from app endpoint after admin fetch failure', {
+              fallbackReason: adminFetchError,
+            });
+          }
+
+          this.cache = fallbackResponse.data;
+          this.cacheSource = 'supabase';
+          this.rebuildSearchDocuments(fallbackResponse.data, 'supabase');
+          return { tools: fallbackResponse.data, source: 'supabase' };
+        }
+
+        Logger.warn('ToolRepository: App tools endpoint returned no data, falling back to static dataset', {
+          error: fallbackResponse.error,
+        });
+      } catch (fallbackError) {
+        Logger.warn('ToolRepository: App tools fetch failed, falling back to static dataset', {
+          error: fallbackError instanceof Error ? fallbackError.message : 'Unknown error',
         });
       }
     }
