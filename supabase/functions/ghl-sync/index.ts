@@ -220,75 +220,46 @@ Deno.serve(async (req) => {
   }
 });
 
-async function verifySignature(body: string, signature: string, secret: string): Promise<boolean> {
+// ADD THIS NEW BLOCK IN ITS PLACE ↓
+// New function to verify the signature using the Public Key
+async function verifySignature(payload: string, signature: string, publicKeyPem: string): Promise<boolean> {
   try {
-    const cleaned = signature.replace(/^sha256=/i, '').trim();
-    const providedBytes = parseSignatureBytes(cleaned);
-    if (!providedBytes) {
-      return false;
-    }
-
-    const expectedBytes = await computeHmac(body, secret);
-    if (providedBytes.length !== expectedBytes.length) {
-      return false;
-    }
-
-    return timingSafeEqual(providedBytes, expectedBytes);
+    const publicKey = await crypto.subtle.importKey(
+      'spki',
+      pemToBinary(publicKeyPem),
+      { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-26' },
+      false,
+      ['verify']
+    );
+    const signatureBytes = base64ToArrayBuffer(signature);
+    const payloadBytes = new TextEncoder().encode(payload);
+    return await crypto.subtle.verify('RSASSA-PKCS1-v1_5', publicKey, signatureBytes, payloadBytes);
   } catch (error) {
-    console.error('Error verifying webhook signature', error);
+    console.error("Error during signature verification:", error);
     return false;
   }
 }
 
-async function computeHmac(body: string, secret: string): Promise<Uint8Array> {
-  const encoder = new TextEncoder();
-  const key = await crypto.subtle.importKey(
-    'raw',
-    encoder.encode(secret),
-    { name: 'HMAC', hash: 'SHA-256' },
-    false,
-    ['sign'],
-  );
-  const signature = await crypto.subtle.sign('HMAC', key, encoder.encode(body));
-  return new Uint8Array(signature);
+// Helper function to convert the PEM key string to a binary format
+function pemToBinary(pem: string): ArrayBuffer {
+  const base64 = pem
+    .replace(/-----BEGIN PUBLIC KEY-----/g, '')
+    .replace(/-----END PUBLIC KEY-----/g, '')
+    .replace(/\s/g, '');
+  return base64ToArrayBuffer(base64);
 }
 
-function hexToBytes(hex: string): Uint8Array {
-  const normalized = hex.toLowerCase();
-  const bytes = new Uint8Array(normalized.length / 2);
-  for (let i = 0; i < normalized.length; i += 2) {
-    bytes[i / 2] = parseInt(normalized.slice(i, i + 2), 16);
+// Helper function to convert a base64 string to a binary format (ArrayBuffer)
+function base64ToArrayBuffer(base64: string): ArrayBuffer {
+  const binaryString = atob(base64);
+  const len = binaryString.length;
+  const bytes = new Uint8Array(len);
+  for (let i = 0; i < len; i++) {
+    bytes[i] = binaryString.charCodeAt(i);
   }
-  return bytes;
+  return bytes.buffer;
 }
-
-function base64ToBytes(base64: string): Uint8Array {
-  const cleaned = base64
-    .replace(/\s+/g, '')
-    .replace(/-/g, '+')
-    .replace(/_/g, '/');
-  const padding = cleaned.length % 4;
-  const padded = padding === 0 ? cleaned : cleaned + '='.repeat(4 - padding);
-  const binary = atob(padded);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) {
-    bytes[i] = binary.charCodeAt(i);
-  }
-  return bytes;
-}
-
-function parseSignatureBytes(signature: string): Uint8Array | null {
-  if (/^[0-9a-f]+$/i.test(signature) && signature.length % 2 === 0) {
-    return hexToBytes(signature);
-  }
-
-  try {
-    return base64ToBytes(signature);
-  } catch (_error) {
-    console.error('Failed to parse signature as base64 or hex');
-    return null;
-  }
-}
+// ADD THIS NEW BLOCK IN ITS PLACE ↑
 
 function parseEnvList(value: string | null): Set<string> {
   if (!value) return new Set();
