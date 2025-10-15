@@ -54,20 +54,19 @@ Deno.serve(async (req) => {
     );
   }
 
-  const supabaseUrl = Deno.env.get('SUPABASE_URL');
-  const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
-  const webhookSecret = Deno.env.get('GHL_WEBHOOK_SECRET');
+const supabaseUrl = Deno.env.get('SUPABASE_URL');
+const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
 
-  if (!supabaseUrl || !supabaseServiceKey || !webhookSecret) {
-    console.error('Missing required environment variables for Supabase or webhook secret.');
-    return new Response(
-      JSON.stringify({ error: 'Server configuration error' }),
-      {
-        status: 500,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      },
-    );
-  }
+if (!supabaseUrl || !supabaseServiceKey) {
+  console.error('Missing required Supabase environment variables.');
+  return new Response(
+    JSON.stringify({ error: 'Server configuration error' }),
+    {
+      status: 500,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    },
+  );
+}
 
 // This is the NEW Public Key verification block
   const rawBody = await req.text();
