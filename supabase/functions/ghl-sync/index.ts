@@ -1,6 +1,22 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { timingSafeEqual } from 'https://deno.land/std@0.224.0/crypto/timing_safe_equal.ts';
 
+// --- GHL Public Key from their documentation ---
+const GHL_PUBLIC_KEY_PEM = `-----BEGIN PUBLIC KEY-----
+MIICIjANBgkqhkiG9w0BAQEFAAOCAg8AMIICCgKCAgEAokvo/r9tVgcfZ5DysOSC
+Frm602qYV0MaAiNnX9O8KxMbiyRKWeL9JpCpVpt4XHIcBOK4u3cLSqJGOLaPuXw6
+dO0t6Q/ZVdAV5Phz+ZtzPL16iCGeK9po6D6JHBpbi989mmzMryUnQJezlYJ3DVfB
+csedpinheNnyYeFXolrJvcsjDtfAeRx5ByHQmTnSdFUzuAnC9/GepgLT9SM4nCpv
+uxmZMxrJt5Rw+VUaQ9B8JSvbMPpez4peKaJPZHBbU3OdeCVx5klVXXZQGNHOs8gF
+3kvoV5rTnXV0IknLBXlcKKAQLZcY/Q9rG6Ifi9c+5vqlvHPCUJFT5XUGG5RKgOKU
+J062fRtN+rLYZUV+BjafxQauvC8wSWeYja63VSUruvmNj8xkx2zE/Juc+yjLjTXp
+IocmaiFeAO6fUtNjDeFVkhf5LNb59vECyrHD2SQIrhgXpO4Q3dVNA5rw576PwTzN
+h/AMfHKIjE4xQA1SZuYJmNnmVZLIZBlQAF9Ntd03rfadZ+yDiOXCCs9FkHibELhC
+HULgCsnuDJHcrGNd5/Ddm5hxGQ0ASitgHeMZ0kcIOwKDOzOU53lDza6/Y09T7sYJ
+PQe7z0cvj7aE4B+Ax1ZoZGPzpJlZtGXCsu9aTEGEnKzmsFqwcSsnw3JB31IGKAyk
+T1hhTiaCeIY/OwwwNUY2yvcCAwEAAQ==
+-----END PUBLIC KEY-----`;
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-gohighlevel-signature, x-hl-signature',
@@ -53,21 +69,19 @@ Deno.serve(async (req) => {
     );
   }
 
+// This is the NEW Public Key verification block
   const rawBody = await req.text();
-  const signatureHeader =
-    req.headers.get('x-gohighlevel-signature') ||
-    req.headers.get('x-hl-signature') ||
-    req.headers.get('x-signature');
+  const signatureHeader = req.headers.get('x-wh-signature'); // Use the correct header name
 
   if (!signatureHeader) {
-    console.warn('Missing signature header on incoming webhook.');
+    console.warn('Request rejected: Missing x-wh-signature header.');
     return new Response(
       JSON.stringify({ error: 'Unauthorized' }),
       { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
     );
   }
 
-  const signatureValid = await verifySignature(rawBody, signatureHeader, webhookSecret);
+  const signatureValid = await verifySignature(rawBody, signatureHeader, GHL_PUBLIC_KEY_PEM);
   if (!signatureValid) {
     console.warn('Signature verification failed.');
     return new Response(
