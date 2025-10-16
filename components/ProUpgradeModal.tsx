@@ -38,7 +38,7 @@ export const ProUpgradeModal: React.FC = () => {
               <LockIcon className="h-8 w-8 text-accent-dark-blue dark:text-accent-light-blue" />
             </div>
             <h3 className="font-serif text-2xl font-bold text-light-text-primary dark:text-dark-text-primary mb-3">
-              🔒 Access Restricted
+              Access Restricted
             </h3>
             <p className="text-light-text-secondary dark:text-dark-text-secondary mb-6">
               This tool is exclusive to members of the Personal Brand Intensive program. Want access to this tool?
