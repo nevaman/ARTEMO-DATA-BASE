@@ -38,16 +38,16 @@ export const ProUpgradeModal: React.FC = () => {
               <LockIcon className="h-8 w-8 text-accent-dark-blue dark:text-accent-light-blue" />
             </div>
             <h3 className="font-serif text-2xl font-bold text-light-text-primary dark:text-dark-text-primary mb-3">
-              Upgrade to Pro
+              🔒 Access Restricted
             </h3>
             <p className="text-light-text-secondary dark:text-dark-text-secondary mb-6">
-              This tool is only available for people who have access to the Personal Brand Intensive. Want access to that?
+              This tool is exclusive to members of the Personal Brand Intensive program. Want access to this tool?
             </p>
             <button
               onClick={handleUpgrade}
               className="w-full px-4 py-3 bg-primary-accent text-text-on-accent rounded-md font-medium text-lg hover:opacity-90 transition-opacity"
             >
-              Email support here
+              Contact Support
             </button>
           </div>
         </div>
