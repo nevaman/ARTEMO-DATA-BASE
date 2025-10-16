@@ -25,12 +25,26 @@ const ROLE_PRIORITY = {
   admin: 3
 };
 Deno.serve(async (req)=>{
+  const requestId = crypto.randomUUID();
+  console.log(`[${requestId}] ========== NEW REQUEST ==========`);
+  console.log(`[${requestId}] Method: ${req.method}`);
+  console.log(`[${requestId}] URL: ${req.url}`);
+
+  // Log all headers for debugging
+  const headers = {};
+  req.headers.forEach((value, key) => {
+    headers[key] = value;
+  });
+  console.log(`[${requestId}] Headers:`, JSON.stringify(headers, null, 2));
+
   if (req.method === 'OPTIONS') {
+    console.log(`[${requestId}] Handling OPTIONS request`);
     return new Response('ok', {
       headers: corsHeaders
     });
   }
   if (req.method !== 'POST') {
+    console.warn(`[${requestId}] Method not allowed: ${req.method}`);
     return new Response(JSON.stringify({
       error: 'Method not allowed'
     }), {
@@ -44,7 +58,7 @@ Deno.serve(async (req)=>{
   const supabaseUrl = Deno.env.get('SUPABASE_URL');
   const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
   if (!supabaseUrl || !supabaseServiceKey) {
-    console.error('Missing required Supabase environment variables.');
+    console.error(`[${requestId}] Missing required Supabase environment variables.`);
     return new Response(JSON.stringify({
       error: 'Server configuration error'
     }), {
@@ -55,13 +69,23 @@ Deno.serve(async (req)=>{
       }
     });
   }
-  // This is the NEW Public Key verification block
+
+  // Read the raw body
   const rawBody = await req.text();
-  const signatureHeader = req.headers.get('x-wh-signature'); // Use the correct header name
+  console.log(`[${requestId}] Raw body length: ${rawBody.length} bytes`);
+  console.log(`[${requestId}] Raw body preview: ${rawBody.substring(0, 500)}...`);
+
+  // Check for signature header
+  const signatureHeader = req.headers.get('x-wh-signature');
+  console.log(`[${requestId}] Signature header (x-wh-signature): ${signatureHeader ? 'PRESENT' : 'MISSING'}`);
+
   if (!signatureHeader) {
-    console.warn('Request rejected: Missing x-wh-signature header.');
+    console.warn(`[${requestId}] Request rejected: Missing signature header.`);
+    console.log(`[${requestId}] Available headers: ${Object.keys(headers).join(', ')}`);
     return new Response(JSON.stringify({
-      error: 'Unauthorized'
+      error: 'Unauthorized',
+      message: 'Missing signature header',
+      requestId
     }), {
       status: 401,
       headers: {
@@ -70,11 +94,17 @@ Deno.serve(async (req)=>{
       }
     });
   }
+
+  console.log(`[${requestId}] Starting signature verification...`);
   const signatureValid = await verifySignature(rawBody, signatureHeader, GHL_PUBLIC_KEY_PEM);
+  console.log(`[${requestId}] Signature verification result: ${signatureValid ? 'VALID' : 'INVALID'}`);
+
   if (!signatureValid) {
-    console.warn('Signature verification failed.');
+    console.warn(`[${requestId}] Signature verification failed.`);
     return new Response(JSON.stringify({
-      error: 'Unauthorized'
+      error: 'Unauthorized',
+      message: 'Signature verification failed',
+      requestId
     }), {
       status: 401,
       headers: {
@@ -83,13 +113,18 @@ Deno.serve(async (req)=>{
       }
     });
   }
+
+  console.log(`[${requestId}] Signature verified successfully`);
+
   let payload;
   try {
     payload = JSON.parse(rawBody);
+    console.log(`[${requestId}] Parsed JSON payload successfully`);
   } catch (error) {
-    console.error('Invalid JSON payload received from GHL.', error);
+    console.error(`[${requestId}] Invalid JSON payload received from GHL.`, error);
     return new Response(JSON.stringify({
-      error: 'Invalid JSON payload'
+      error: 'Invalid JSON payload',
+      requestId
     }), {
       status: 400,
       headers: {
@@ -98,6 +133,9 @@ Deno.serve(async (req)=>{
       }
     });
   }
+
+  console.log(`[${requestId}] Full payload:`, JSON.stringify(payload, null, 2));
+
   const eventId = extractString(payload, [
     'event_id',
     'eventId',
@@ -105,22 +143,36 @@ Deno.serve(async (req)=>{
     'meta.event_id',
     'meta.eventId'
   ]);
+  console.log(`[${requestId}] Extracted eventId: ${eventId}`);
+
   const eventType = normalizeEventType(payload);
+  console.log(`[${requestId}] Extracted eventType: ${eventType}`);
+
   const contact = extractContact(payload);
+  console.log(`[${requestId}] Extracted contact:`, JSON.stringify(contact, null, 2));
+
   const productId = extractProductId(payload);
+  console.log(`[${requestId}] Extracted productId: ${productId}`);
+
   const tagSet = extractTags(payload);
-  console.log('Processing GHL webhook', {
+  console.log(`[${requestId}] Extracted tags:`, Array.from(tagSet));
+
+  console.log(`[${requestId}] Processing GHL webhook`, {
     eventId,
     eventType,
     productId,
+    contactEmail: contact.email,
+    contactName: contact.name,
     tags: Array.from(tagSet)
   });
+
   if (!contact.email) {
-    console.warn('Webhook payload missing contact email. Cannot reconcile user.');
+    console.warn(`[${requestId}] Webhook payload missing contact email. Cannot reconcile user.`);
     return new Response(JSON.stringify({
       success: false,
       message: 'Webhook ignored: contact email is required.',
-      eventId
+      eventId,
+      requestId
     }), {
       status: 202,
       headers: {
@@ -130,8 +182,13 @@ Deno.serve(async (req)=>{
     });
   }
   const supabase = createClient(supabaseUrl, supabaseServiceKey);
+  console.log(`[${requestId}] Created Supabase client`);
+
   const proProductIds = parseEnvList(Deno.env.get('GHL_PRO_PRODUCT_IDS'));
   const trialProductIds = parseEnvList(Deno.env.get('GHL_TRIAL_PRODUCT_IDS'));
+  console.log(`[${requestId}] Environment config - Pro Product IDs: ${Array.from(proProductIds).join(', ') || 'NONE'}`);
+  console.log(`[${requestId}] Environment config - Trial Product IDs: ${Array.from(trialProductIds).join(', ') || 'NONE'}`);
+
   const action = determineLifecycleAction({
     eventType,
     productId,
@@ -139,16 +196,16 @@ Deno.serve(async (req)=>{
     proProductIds,
     trialProductIds
   });
+  console.log(`[${requestId}] Determined action:`, JSON.stringify(action, null, 2));
+
   if (action.type === 'ignore') {
-    console.log('Webhook ignored', {
-      reason: action.reason,
-      eventId
-    });
+    console.log(`[${requestId}] Webhook ignored - Reason: ${action.reason}`);
     return new Response(JSON.stringify({
       success: true,
       action: action.type,
       reason: action.reason,
-      eventId
+      eventId,
+      requestId
     }), {
       headers: {
         ...corsHeaders,
@@ -156,6 +213,9 @@ Deno.serve(async (req)=>{
       }
     });
   }
+
+  console.log(`[${requestId}] Starting to execute action: ${action.type}`);
+
   try {
     let result = {};
     switch(action.type){
@@ -163,6 +223,7 @@ Deno.serve(async (req)=>{
       case 'trial_signup':
         {
           const desiredRole = action.type === 'pro_purchase' ? 'pro' : 'user';
+          console.log(`[${requestId}] Executing ${action.type} - Creating/updating account with role: ${desiredRole}`);
           result = await ensureAccount({
             supabase,
             email: contact.email,
@@ -172,40 +233,47 @@ Deno.serve(async (req)=>{
             activate: true,
             sendInvite: true
           });
+          console.log(`[${requestId}] ensureAccount result:`, JSON.stringify(result, null, 2));
           break;
         }
       case 'payment_failed':
         {
+          console.log(`[${requestId}] Executing payment_failed - Deactivating account`);
           result = await updateActiveStatus({
             supabase,
             email: contact.email,
             active: false,
             ghlContactId: contact.id
           });
+          console.log(`[${requestId}] updateActiveStatus result:`, JSON.stringify(result, null, 2));
           break;
         }
       case 'payment_recovered':
         {
+          console.log(`[${requestId}] Executing payment_recovered - Reactivating account`);
           result = await updateActiveStatus({
             supabase,
             email: contact.email,
             active: true,
             ghlContactId: contact.id
           });
+          console.log(`[${requestId}] updateActiveStatus result:`, JSON.stringify(result, null, 2));
           break;
         }
       case 'cancellation':
         {
+          console.log(`[${requestId}] Executing cancellation - Deactivating account`);
           result = await updateActiveStatus({
             supabase,
             email: contact.email,
             active: false,
             ghlContactId: contact.id
           });
+          console.log(`[${requestId}] updateActiveStatus result:`, JSON.stringify(result, null, 2));
           break;
         }
     }
-    console.log('Webhook processed successfully', {
+    console.log(`[${requestId}] ✓ Webhook processed successfully`, {
       eventId,
       action: action.type,
       result
@@ -215,7 +283,8 @@ Deno.serve(async (req)=>{
       action: action.type,
       reason: action.reason,
       result,
-      eventId
+      eventId,
+      requestId
     }), {
       headers: {
         ...corsHeaders,
@@ -223,14 +292,18 @@ Deno.serve(async (req)=>{
       }
     });
   } catch (error) {
-    console.error('Failed processing webhook action', {
+    console.error(`[${requestId}] ✗ Failed processing webhook action`, {
       eventId,
       action: action.type,
-      error
+      errorMessage: error.message,
+      errorStack: error.stack,
+      error: JSON.stringify(error, null, 2)
     });
     return new Response(JSON.stringify({
       error: 'Internal server error',
-      eventId
+      message: error.message,
+      eventId,
+      requestId
     }), {
       status: 500,
       headers: {
@@ -244,17 +317,34 @@ Deno.serve(async (req)=>{
 // New function to verify the signature using the Public Key
 async function verifySignature(payload, signature, publicKeyPem) {
   try {
+    console.log('[verifySignature] Starting signature verification');
+    console.log('[verifySignature] Signature length:', signature.length);
+    console.log('[verifySignature] Payload length:', payload.length);
+
     const publicKey = await crypto.subtle.importKey('spki', pemToBinary(publicKeyPem), {
       name: 'RSASSA-PKCS1-v1_5',
-      hash: 'SHA-26'
+      hash: 'SHA-256'
     }, false, [
       'verify'
     ]);
+    console.log('[verifySignature] Public key imported successfully');
+
     const signatureBytes = base64ToArrayBuffer(signature);
+    console.log('[verifySignature] Signature bytes length:', signatureBytes.byteLength);
+
     const payloadBytes = new TextEncoder().encode(payload);
-    return await crypto.subtle.verify('RSASSA-PKCS1-v1_5', publicKey, signatureBytes, payloadBytes);
+    console.log('[verifySignature] Payload bytes length:', payloadBytes.byteLength);
+
+    const isValid = await crypto.subtle.verify('RSASSA-PKCS1-v1_5', publicKey, signatureBytes, payloadBytes);
+    console.log('[verifySignature] Verification result:', isValid);
+
+    return isValid;
   } catch (error) {
-    console.error("Error during signature verification:", error);
+    console.error("[verifySignature] Error during signature verification:", {
+      message: error.message,
+      stack: error.stack,
+      error: JSON.stringify(error, null, 2)
+    });
     return false;
   }
 }
@@ -482,6 +572,15 @@ function determineLifecycleAction({ eventType, productId, tags, proProductIds, t
   };
 }
 async function ensureAccount({ supabase, email, fullName, ghlContactId, desiredRole, activate, sendInvite }) {
+  console.log('[ensureAccount] Starting with params:', {
+    email,
+    fullName,
+    ghlContactId,
+    desiredRole,
+    activate,
+    sendInvite
+  });
+
   const metadata = {};
   if (fullName) {
     metadata.full_name = fullName;
@@ -492,31 +591,60 @@ async function ensureAccount({ supabase, email, fullName, ghlContactId, desiredR
   if (ghlContactId) {
     metadata.ghl_contact_id = ghlContactId;
   }
+  console.log('[ensureAccount] Prepared metadata:', metadata);
+
   let userId = null;
   let createdNewUser = false;
   let existingUserRole = null;
   let userMetadata = {};
+
+  console.log('[ensureAccount] Checking for existing user by email:', email);
   const { data: existingUserResponse, error: fetchError } = await supabase.auth.admin.getUserByEmail(email);
-  if (fetchError && fetchError.message && !fetchError.message.includes('User not found')) {
-    throw fetchError;
+
+  if (fetchError) {
+    console.log('[ensureAccount] getUserByEmail error:', {
+      message: fetchError.message,
+      code: fetchError.code
+    });
+    if (fetchError.message && !fetchError.message.includes('User not found')) {
+      throw fetchError;
+    }
   }
+
   if (existingUserResponse?.user) {
+    console.log('[ensureAccount] Found existing user:', {
+      userId: existingUserResponse.user.id,
+      email: existingUserResponse.user.email,
+      userMetadata: existingUserResponse.user.user_metadata
+    });
     userId = existingUserResponse.user.id;
     existingUserRole = existingUserResponse.user.user_metadata?.role || null;
     userMetadata = {
       ...existingUserResponse.user.user_metadata ?? {}
     };
+  } else {
+    console.log('[ensureAccount] No existing user found');
   }
+
   if (!userId) {
+    console.log('[ensureAccount] Creating new user with email:', email);
     const { data: createData, error: createError } = await supabase.auth.admin.createUser({
       email,
       email_confirm: false,
       user_metadata: metadata
     });
+
     if (createError) {
+      console.error('[ensureAccount] Error creating user:', {
+        message: createError.message,
+        code: createError.code
+      });
+
       if (createError.message?.includes('already registered')) {
+        console.log('[ensureAccount] User already registered, retrying fetch');
         const { data: retryUser, error: retryError } = await supabase.auth.admin.getUserByEmail(email);
         if (retryError) {
+          console.error('[ensureAccount] Retry fetch failed:', retryError);
           throw retryError;
         }
         userId = retryUser?.user?.id ?? null;
@@ -524,6 +652,7 @@ async function ensureAccount({ supabase, email, fullName, ghlContactId, desiredR
         userMetadata = {
           ...retryUser?.user?.user_metadata ?? {}
         };
+        console.log('[ensureAccount] Retrieved user on retry:', { userId, existingUserRole });
       } else {
         throw createError;
       }
@@ -533,12 +662,16 @@ async function ensureAccount({ supabase, email, fullName, ghlContactId, desiredR
       userMetadata = {
         ...createData.user?.user_metadata ?? metadata
       };
+      console.log('[ensureAccount] User created successfully:', { userId, createdNewUser });
     }
   }
+
   if (!userId) {
+    console.error('[ensureAccount] Failed to resolve userId');
     throw new Error('Unable to resolve Supabase user id for webhook contact');
   }
   if (!createdNewUser) {
+    console.log('[ensureAccount] Updating existing user metadata');
     const nextMetadata = {
       ...userMetadata
     };
@@ -546,36 +679,59 @@ async function ensureAccount({ supabase, email, fullName, ghlContactId, desiredR
     if (fullName && nextMetadata.full_name !== fullName) {
       nextMetadata.full_name = fullName;
       metadataChanged = true;
+      console.log('[ensureAccount] Full name changed');
     }
     if (ghlContactId && nextMetadata.ghl_contact_id !== ghlContactId) {
       nextMetadata.ghl_contact_id = ghlContactId;
       metadataChanged = true;
+      console.log('[ensureAccount] GHL contact ID changed');
     }
     if (nextMetadata.role_hint !== desiredRole) {
       nextMetadata.role_hint = desiredRole;
       metadataChanged = true;
+      console.log('[ensureAccount] Role hint changed');
     }
     if (metadataChanged) {
+      console.log('[ensureAccount] Updating user metadata:', nextMetadata);
       const { error: updateMetadataError } = await supabase.auth.admin.updateUserById(userId, {
         user_metadata: nextMetadata
       });
       if (updateMetadataError) {
-        console.error('Failed to update user metadata for existing account', updateMetadataError);
+        console.error('[ensureAccount] Failed to update user metadata:', updateMetadataError);
       } else {
+        console.log('[ensureAccount] User metadata updated successfully');
         userMetadata = nextMetadata;
       }
+    } else {
+      console.log('[ensureAccount] No metadata changes needed');
     }
   }
+
+  console.log('[ensureAccount] Fetching user profile from database');
   const { data: profile, error: profileError } = await supabase.from('user_profiles').select('role, preferences, full_name, active').eq('id', userId).maybeSingle();
+
   if (profileError && profileError.code !== 'PGRST116') {
-    // PGRST116 = Row not found
-    console.warn('Error fetching user profile; proceeding with upsert.', profileError);
+    console.warn('[ensureAccount] Error fetching user profile:', {
+      code: profileError.code,
+      message: profileError.message
+    });
   }
+
+  if (profile) {
+    console.log('[ensureAccount] Found existing profile:', profile);
+  } else {
+    console.log('[ensureAccount] No existing profile found, will create new one');
+  }
+
   const nextRole = resolveRoleUpgrade({
     currentRole: profile?.role || existingUserRole || 'user',
     desiredRole
   });
+  console.log('[ensureAccount] Resolved role:', { currentRole: profile?.role || existingUserRole || 'user', desiredRole, nextRole });
+
   const preferences = mergePreferences(profile?.preferences, ghlContactId);
+  console.log('[ensureAccount] Merged preferences:', preferences);
+
   const updates = {
     id: userId,
     role: nextRole,
@@ -589,57 +745,125 @@ async function ensureAccount({ supabase, email, fullName, ghlContactId, desiredR
   if (preferences) {
     updates.preferences = preferences;
   }
+
+  console.log('[ensureAccount] Upserting profile with updates:', updates);
   const { error: upsertError } = await supabase.from('user_profiles').upsert(updates, {
     onConflict: 'id'
   });
+
   if (upsertError) {
+    console.error('[ensureAccount] Profile upsert error:', {
+      message: upsertError.message,
+      code: upsertError.code,
+      details: upsertError.details
+    });
     throw upsertError;
   }
+  console.log('[ensureAccount] Profile upserted successfully');
+
   if (sendInvite && createdNewUser) {
+    console.log('[ensureAccount] Sending invitation email to:', email);
     const inviteOptions = {
       data: metadata
     };
     const redirectTo = Deno.env.get('APP_LOGIN_URL');
     if (redirectTo) {
       inviteOptions.redirectTo = redirectTo;
+      console.log('[ensureAccount] Redirect URL:', redirectTo);
     }
     const { error: inviteError } = await supabase.auth.admin.inviteUserByEmail(email, inviteOptions);
     if (inviteError) {
-      console.error('Failed to send invitation email for new user', inviteError);
+      console.error('[ensureAccount] Failed to send invitation email:', {
+        message: inviteError.message,
+        code: inviteError.code
+      });
+    } else {
+      console.log('[ensureAccount] Invitation email sent successfully');
     }
   }
-  return {
+
+  const result = {
     userId,
     createdNewUser,
     updatedRole: nextRole,
     active: activate
   };
+  console.log('[ensureAccount] Completed with result:', result);
+  return result;
 }
 async function updateActiveStatus({ supabase, email, active, ghlContactId }) {
+  console.log('[updateActiveStatus] Starting with params:', {
+    email,
+    active,
+    ghlContactId
+  });
+
+  console.log('[updateActiveStatus] Fetching user by email:', email);
   const { data: userResponse, error: fetchError } = await supabase.auth.admin.getUserByEmail(email);
-  if (fetchError && fetchError.message && !fetchError.message.includes('User not found')) {
-    throw fetchError;
+
+  if (fetchError) {
+    console.log('[updateActiveStatus] getUserByEmail error:', {
+      message: fetchError.message,
+      code: fetchError.code
+    });
+    if (fetchError.message && !fetchError.message.includes('User not found')) {
+      throw fetchError;
+    }
   }
+
   const userId = userResponse?.user?.id;
   if (!userId) {
+    console.log('[updateActiveStatus] User not found, skipping');
     return {
       skipped: true,
       reason: 'User not found by email'
     };
   }
+
+  console.log('[updateActiveStatus] Found user:', userId);
+  console.log('[updateActiveStatus] Fetching user profile');
+
   const { data: profile, error: profileError } = await supabase.from('user_profiles').select('role, active, preferences').eq('id', userId).maybeSingle();
+
   if (profileError && profileError.code !== 'PGRST116') {
-    console.warn('Error fetching user profile prior to status update', profileError);
+    console.warn('[updateActiveStatus] Error fetching user profile:', {
+      code: profileError.code,
+      message: profileError.message
+    });
   }
+
+  if (profile) {
+    console.log('[updateActiveStatus] Found profile:', {
+      role: profile.role,
+      active: profile.active,
+      preferences: profile.preferences
+    });
+  } else {
+    console.log('[updateActiveStatus] No profile found');
+  }
+
   const existingContactId = getContactIdFromPreferences(profile?.preferences);
   const shouldUpdateContactId = Boolean(ghlContactId && ghlContactId !== existingContactId);
+
+  console.log('[updateActiveStatus] Status check:', {
+    currentActive: profile?.active,
+    desiredActive: active,
+    existingContactId,
+    newContactId: ghlContactId,
+    shouldUpdateContactId
+  });
+
   if (profile?.active === active && !shouldUpdateContactId) {
+    console.log('[updateActiveStatus] No changes needed, skipping');
     return {
       skipped: true,
       reason: 'Active status already set'
     };
   }
+
   const preferences = mergePreferences(profile?.preferences, ghlContactId);
+  console.log('[updateActiveStatus] Merged preferences:', preferences);
+
   const updates = {
     id: userId,
     active,
@@ -650,16 +874,28 @@ async function updateActiveStatus({ supabase, email, active, ghlContactId }) {
   if (preferences) {
     updates.preferences = preferences;
   }
+
+  console.log('[updateActiveStatus] Upserting profile with updates:', updates);
   const { error: upsertError } = await supabase.from('user_profiles').upsert(updates, {
     onConflict: 'id'
   });
+
   if (upsertError) {
+    console.error('[updateActiveStatus] Profile upsert error:', {
+      message: upsertError.message,
+      code: upsertError.code,
+      details: upsertError.details
+    });
     throw upsertError;
   }
-  return {
+
+  console.log('[updateActiveStatus] Profile updated successfully');
+  const result = {
     userId,
     updatedActive: active
   };
+  console.log('[updateActiveStatus] Completed with result:', result);
+  return result;
 }
 function resolveRoleUpgrade({ currentRole, desiredRole }) {
   const currentPriority = ROLE_PRIORITY[currentRole];
