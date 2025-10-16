@@ -78,7 +78,7 @@ Deno.serve(async (req: Request) => {
 
   const supabaseUrl = Deno.env.get('SUPABASE_URL');
   const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
-  const webhookSecret = Deno.env.get('MAKE_WEBHOOK_SECRET');
+  const webhookSecret = Deno.env.get('MAKE_WEBHOOK_SECRET')?.trim();
 
   console.log(`[${requestId}] Environment check:`, {
     hasSupabaseUrl: !!supabaseUrl,
