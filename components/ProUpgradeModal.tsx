@@ -41,13 +41,13 @@ export const ProUpgradeModal: React.FC = () => {
               Upgrade to Pro
             </h3>
             <p className="text-light-text-secondary dark:text-dark-text-secondary mb-6">
-              This is a Pro tool. Upgrade your plan to get exclusive access to this and other powerful features.
+              This tool is only available for people who have access to the Personal Brand Intensive. Want access to that?
             </p>
             <button
               onClick={handleUpgrade}
               className="w-full px-4 py-3 bg-primary-accent text-text-on-accent rounded-md font-medium text-lg hover:opacity-90 transition-opacity"
             >
-              Unlock Pro Tools
+              Email support here
             </button>
           </div>
         </div>
