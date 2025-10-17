@@ -1,13 +1,12 @@
-import React, { useEffect } from 'react';
+import React from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useTools } from '../hooks/useTools';
 import { useProjects } from '../hooks/useProjects';
 import { useUIStore } from '../stores/uiStore';
-import { useAuthStore } from '../stores/authStore';
 import { ToolInterfaceView } from '../components/ToolInterfaceView';
 import { useNotifications } from '../contexts/NotificationContext';
 
-import { BriefcaseIcon, LockIcon } from '../components/Icons';
+import { BriefcaseIcon } from '../components/Icons';
 
 const ToolInterfaceSkeleton: React.FC = () => (
   <div className="flex h-screen animate-pulse">
@@ -35,8 +34,7 @@ export const ToolInterfacePage: React.FC = () => {
   const location = useLocation();
   const { tools, loading, error } = useTools();
   const { projects } = useProjects();
-  const { openModal, setShowProUpgradeModal } = useUIStore();
-  const { isPro, isAdmin } = useAuthStore();
+  const { openModal } = useUIStore();
 
   if (loading) {
     return <ToolInterfaceSkeleton />;
@@ -56,16 +54,6 @@ export const ToolInterfacePage: React.FC = () => {
   const tool = tools.find(t => t.id === toolId);
   const existingChatSession = location.state?.existingChatSession;
 
-  const isProTool = tool?.is_pro || false;
-  const canAccess = !isProTool || isPro || isAdmin;
-
-  useEffect(() => {
-    if (tool && !canAccess) {
-      setShowProUpgradeModal(true);
-      navigate('/tools', { replace: true });
-    }
-  }, [tool, canAccess, navigate, setShowProUpgradeModal]);
-
   if (!tool) {
     return (
       <div className="p-4 lg:p-6 max-w-5xl mx-auto w-full">
@@ -83,38 +71,6 @@ export const ToolInterfacePage: React.FC = () => {
           >
             Back to All Tools
           </button>
-        </div>
-      </div>
-    );
-  }
-
-  if (!canAccess) {
-    return (
-      <div className="p-4 lg:p-6 max-w-5xl mx-auto w-full">
-        <div className="text-center py-20">
-          <div className="mx-auto flex items-center justify-center h-20 w-20 rounded-full bg-gradient-to-br from-purple-100 to-fuchsia-100 dark:from-purple-900/30 dark:to-fuchsia-900/30 mb-6">
-            <LockIcon className="h-10 w-10 text-purple-600 dark:text-purple-400" />
-          </div>
-          <h2 className="text-2xl font-bold text-light-text-primary dark:text-dark-text-primary mb-4">
-            Pro Tool Access Required
-          </h2>
-          <p className="text-light-text-secondary dark:text-dark-text-secondary mb-6 max-w-md mx-auto">
-            This tool is exclusive to Pro members. Upgrade your account to access this and all other Pro tools.
-          </p>
-          <div className="flex gap-4 justify-center">
-            <button
-              onClick={() => navigate('/tools')}
-              className="px-4 py-2 border border-light-border dark:border-dark-border text-light-text-primary dark:text-dark-text-primary rounded-md hover:bg-light-bg-sidebar dark:hover:bg-dark-bg-component"
-            >
-              Back to All Tools
-            </button>
-            <button
-              onClick={() => setShowProUpgradeModal(true)}
-              className="px-4 py-2 bg-primary-accent text-text-on-accent rounded-md hover:opacity-85"
-            >
-              Contact Support
-            </button>
-          </div>
         </div>
       </div>
     );
