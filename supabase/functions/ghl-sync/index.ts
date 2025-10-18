@@ -871,5 +871,5 @@ function jsonResponse(obj, status = 200) {
       ...corsHeaders,
       'Content-Type': 'application/json'
     }
-  }); 
-}   
+  });
+}
