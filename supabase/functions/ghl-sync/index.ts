@@ -285,18 +285,21 @@ async function ensureAccount({
     sendInvite
   });
 
-  // CORRECTED: Use fast getUserByEmail (not slow findAuthUserByEmail)
-  const { data: existingUserResponse, error: fetchError } = await supabase.auth.admin.getUserByEmail(email);
+  // Fetch user by email using listUsers
+  const { data: { users }, error: fetchError } = await supabase.auth.admin.listUsers({
+    filter: `email.eq.${email}`
+  });
 
-  if (fetchError && !fetchError.message?.includes('User not found')) {
+  if (fetchError) {
     console.error(`[${requestId}][ensureAccount] Error fetching user:`, fetchError);
     throw fetchError;
   }
 
-  let userId = existingUserResponse?.user?.id;
+  const existingUser = users && users.length > 0 ? users[0] : null;
+  let userId = existingUser?.id;
   let createdNewUser = false;
-  let existingUserRole = existingUserResponse?.user?.user_metadata?.role || null;
-  let userMetadata = existingUserResponse?.user?.user_metadata || {};
+  let existingUserRole = existingUser?.user_metadata?.role || null;
+  let userMetadata = existingUser?.user_metadata || {};
 
   console.log(`[${requestId}][ensureAccount] Existing user:`, userId ? 'Found' : 'Not found');
 
@@ -319,13 +322,16 @@ async function ensureAccount({
     if (createError) {
       if (createError.message?.includes('already registered')) {
         console.log(`[${requestId}][ensureAccount] User already exists, retrying fetch`);
-        const { data: retryUser, error: retryError } = await supabase.auth.admin.getUserByEmail(email);
+        const { data: { users: retryUsers }, error: retryError } = await supabase.auth.admin.listUsers({
+          filter: `email.eq.${email}`
+        });
 
         if (retryError) throw retryError;
 
-        userId = retryUser?.user?.id;
-        existingUserRole = retryUser?.user?.user_metadata?.role || null;
-        userMetadata = retryUser?.user?.user_metadata || {};
+        const retryUser = retryUsers && retryUsers.length > 0 ? retryUsers[0] : null;
+        userId = retryUser?.id;
+        existingUserRole = retryUser?.user_metadata?.role || null;
+        userMetadata = retryUser?.user_metadata || {};
       } else {
         throw createError;
       }
@@ -493,15 +499,18 @@ async function updateActiveStatus({
     ghlContactId
   });
 
-  // CORRECTED: Use fast getUserByEmail (not slow findAuthUserByEmail)
-  const { data: userResponse, error: fetchError } = await supabase.auth.admin.getUserByEmail(email);
+  // Fetch user by email using listUsers
+  const { data: { users }, error: fetchError } = await supabase.auth.admin.listUsers({
+    filter: `email.eq.${email}`
+  });
 
-  if (fetchError && !fetchError.message?.includes('User not found')) {
+  if (fetchError) {
     console.error(`[${requestId}][updateActiveStatus] Error fetching user:`, fetchError);
     throw fetchError;
   }
 
-  const userId = userResponse?.user?.id;
+  const existingUser = users && users.length > 0 ? users[0] : null;
+  const userId = existingUser?.id;
 
   if (!userId) {
     console.log(`[${requestId}][updateActiveStatus] User not found, skipping`);
@@ -574,7 +583,7 @@ async function updateActiveStatus({
 
   // Update user metadata if GHL contact ID provided
   if (ghlContactId) {
-    const currentMetadata = userResponse?.user?.user_metadata || {};
+    const currentMetadata = existingUser?.user_metadata || {};
 
     if (currentMetadata.ghl_contact_id !== ghlContactId) {
       const { error: authError } = await supabase.auth.admin.updateUserById(userId, {
