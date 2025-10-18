@@ -441,7 +441,7 @@ export class AdminApiService {
       const users: User[] = (profiles || []).map(profile => {
         return {
           id: profile.id,
-          email: profile.email ||'Email not available',
+          email: profile.email ||'Email is now available',
           fullName: profile.full_name || '',
           role: profile.role as 'user' | 'admin',
           organization: profile.organization || '',
