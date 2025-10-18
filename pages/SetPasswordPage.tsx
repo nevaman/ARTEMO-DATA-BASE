@@ -20,9 +20,7 @@ export const SetPasswordPage: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const notifications = useNotifications();
-  const { isAuthenticated: storeIsAuthenticated } = useAuthStore((state) => ({
-    isAuthenticated: state.isAuthenticated,
-  }));
+  const storeIsAuthenticated = useAuthStore((state) => state.isAuthenticated);
 
   const [status, setStatus] = useState<InviteStatus>('initializing');
   const [sessionUser, setSessionUser] = useState<User | null>(null);
