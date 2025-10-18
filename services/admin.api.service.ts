@@ -421,7 +421,7 @@ export class AdminApiService {
         .select(`
           id,
           full_name,
-          email,
+          
           role,
           organization,
           active,
