@@ -421,7 +421,7 @@ export class AdminApiService {
         .select(`
           id,
           full_name,
-          
+        
           role,
           organization,
           active,
@@ -442,7 +442,7 @@ export class AdminApiService {
       const users: User[] = (profiles || []).map(profile => {
         return {
           id: profile.id,
-          email: profile.email ||'email not available',
+          email: profile.email ||'Email Hidden For Security',
           fullName: profile.full_name || '',
           role: profile.role as 'user' | 'admin',
           organization: profile.organization || '',
