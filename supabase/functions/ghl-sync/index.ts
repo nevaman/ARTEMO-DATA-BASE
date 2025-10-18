@@ -963,18 +963,16 @@ async function findAuthUserByEmail({ supabase, email, requestId }) {
     return { user: null, normalizedEmail: null };
   }
 
-  const { data, error } = await supabase
-    .from('auth.users')
-    .select('id, email, user_metadata')
-    .eq('email', normalizedEmail)
-    .maybeSingle();
+  const { data, error } = await supabase.auth.admin.getUserByEmail(normalizedEmail);
 
-  if (error && error.code !== 'PGRST116') {
+  if (error) {
     console.error(`[${requestId}][findAuthUserByEmail] Lookup failed:`, error);
     throw error;
   }
 
-  return { user: data || null, normalizedEmail };
+  const user = data?.user ?? data ?? null;
+
+  return { user, normalizedEmail };
 }
 
 function normalizeEmail(email) {
