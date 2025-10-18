@@ -182,6 +182,8 @@ Deno.serve(async (req) => {
           console.log(`[${requestId}] Executing ${action.type} with role: ${desiredRole}`);
           result = await ensureAccount({
             supabase,
+            supabaseUrl,
+            supabaseServiceKey,
             email: contact.email,
             fullName: contact.name,
             ghlContactId: contact.id,
@@ -205,6 +207,8 @@ Deno.serve(async (req) => {
           console.log(`[${requestId}] Executing ${action.type} - Deactivating account`);
           result = await updateActiveStatus({
             supabase,
+            supabaseUrl,
+            supabaseServiceKey,
             email: contact.email,
             active: false,
             disabledMessage: message,
@@ -218,6 +222,8 @@ Deno.serve(async (req) => {
           console.log(`[${requestId}] Executing payment_recovered - Reactivating account`);
           result = await updateActiveStatus({
             supabase,
+            supabaseUrl,
+            supabaseServiceKey,
             email: contact.email,
             active: true,
             disabledMessage: null,
@@ -231,6 +237,8 @@ Deno.serve(async (req) => {
           console.log(`[${requestId}] Executing user_update - Updating user data`);
           result = await ensureAccount({
             supabase,
+            supabaseUrl,
+            supabaseServiceKey,
             email: contact.email,
             fullName: contact.name,
             ghlContactId: contact.id,
@@ -295,6 +303,8 @@ Deno.serve(async (req) => {
 
 async function ensureAccount({
   supabase,
+  supabaseUrl,
+  supabaseServiceKey,
   email,
   fullName,
   ghlContactId,
@@ -324,7 +334,8 @@ async function ensureAccount({
   const safeRoleHint = roleHint || desiredRole;
 
   const { user: existingAuthUser } = await findAuthUserByEmail({
-    supabase,
+    supabaseUrl,
+    supabaseServiceKey,
     email: normalizedEmail,
     requestId
   });
@@ -354,7 +365,8 @@ async function ensureAccount({
       if (isDuplicateUserError(createError)) {
         console.log(`[${requestId}][ensureAccount] Create reported existing user, retrying lookup`);
         const retry = await findAuthUserByEmail({
-          supabase,
+          supabaseUrl,
+          supabaseServiceKey,
           email: normalizedEmail,
           requestId
         });
@@ -515,6 +527,8 @@ async function ensureAccount({
 
 async function updateActiveStatus({
   supabase,
+  supabaseUrl,
+  supabaseServiceKey,
   email,
   active = false,
   disabledMessage = null,
@@ -535,7 +549,8 @@ async function updateActiveStatus({
   }
 
   const { user: existingUser } = await findAuthUserByEmail({
-    supabase,
+    supabaseUrl,
+    supabaseServiceKey,
     email: normalizedEmail,
     requestId
   });
@@ -957,20 +972,64 @@ function getAny(payload, path) {
   return current;
 }
 
-async function findAuthUserByEmail({ supabase, email, requestId }) {
+async function findAuthUserByEmail({ supabaseUrl, supabaseServiceKey, email, requestId }) {
   const normalizedEmail = normalizeEmail(email);
   if (!normalizedEmail) {
     return { user: null, normalizedEmail: null };
   }
 
-  const { data, error } = await supabase.auth.admin.getUserByEmail(normalizedEmail);
-
-  if (error) {
-    console.error(`[${requestId}][findAuthUserByEmail] Lookup failed:`, error);
-    throw error;
+  if (!supabaseUrl || !supabaseServiceKey) {
+    console.error(
+      `[${requestId}][findAuthUserByEmail] Missing Supabase configuration for admin lookup`
+    );
+    throw new Error('Supabase admin configuration is required');
   }
 
-  const user = data?.user ?? data ?? null;
+  const lookupUrl = new URL('/auth/v1/admin/users', supabaseUrl);
+  lookupUrl.searchParams.set('email', normalizedEmail);
+
+  let response;
+  try {
+    response = await fetch(lookupUrl.toString(), {
+      method: 'GET',
+      headers: {
+        apikey: supabaseServiceKey,
+        Authorization: `Bearer ${supabaseServiceKey}`,
+        'Content-Type': 'application/json'
+      }
+    });
+  } catch (networkError) {
+    console.error(`[${requestId}][findAuthUserByEmail] Network error:`, networkError);
+    throw networkError;
+  }
+
+  if (!response.ok) {
+    const errorText = await response.text().catch(() => '<no-body>');
+    console.error(
+      `[${requestId}][findAuthUserByEmail] Admin API error: ${response.status} ${response.statusText} - ${errorText}`
+    );
+    throw new Error(`Admin user lookup failed with status ${response.status}`);
+  }
+
+  let payload;
+  try {
+    payload = await response.json();
+  } catch (parseError) {
+    console.error(`[${requestId}][findAuthUserByEmail] Failed to parse response JSON:`, parseError);
+    throw parseError;
+  }
+
+  const users = Array.isArray(payload?.users)
+    ? payload.users
+    : Array.isArray(payload)
+      ? payload
+      : [];
+
+  const user =
+    users.find((candidate) => {
+      const candidateEmail = normalizeEmail(candidate?.email);
+      return candidateEmail === normalizedEmail;
+    }) || users[0] || null;
 
   return { user, normalizedEmail };
 }
