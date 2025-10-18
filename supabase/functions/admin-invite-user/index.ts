@@ -91,12 +91,13 @@ serve(async (req: Request) => {
     console.log('Admin verification passed. Sending invitation to:', email);
 
     // Use Supabase Auth Admin API to invite user (only available with service role key)
+    const appOrigin = 'https://data-base-nevaman-ar-c2hf.bolt.host';
     const { data: inviteData, error: inviteError } = await supabase.auth.admin.inviteUserByEmail(email, {
-      data: { 
+      data: {
         full_name: fullName,
-        role: role 
+        role: role
       },
-      redirectTo: `${req.headers.get('origin') || 'http://localhost:3000'}/auth/callback`
+      redirectTo: `${appOrigin}/set-password`
     });
 
     if (inviteError) {
