@@ -17,7 +17,19 @@ export const AuthWrapper: React.FC<AuthWrapperProps> = ({ children }) => {
   const [isSignup, setIsSignup] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
   const location = useLocation();
-  const isInviteFlow = location.pathname === '/set-password';
+  const normalizedPath = React.useMemo(() => {
+    if (!location.pathname) {
+      return '/';
+    }
+
+    // Ensure trailing slashes don't prevent the invite flow from rendering.
+    const trimmedPath = location.pathname.replace(/\/+$/, '') || '/';
+    return trimmedPath.toLowerCase();
+  }, [location.pathname]);
+
+  const isInviteFlowRoute = normalizedPath === '/set-password';
+  const hasInviteHash = typeof location.hash === 'string' && location.hash.includes('type=invite');
+  const isInviteFlow = isInviteFlowRoute || hasInviteHash;
 
   if (isInviteFlow) {
     return <>{children}</>;
