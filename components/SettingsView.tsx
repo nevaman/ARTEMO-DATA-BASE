@@ -100,7 +100,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onBack }) => {
     { id: 'profile', label: 'Profile', icon: <UserIcon className="w-4 h-4" /> },
     { id: 'notifications', label: 'Notifications', icon: <BellIcon className="w-4 h-4" /> },
     { id: 'privacy', label: 'Privacy', icon: <EyeIcon className="w-4 h-4" /> },
-     { id: 'change password', label: 'Privacy', icon: <RiLockPasswordLine className="w-4 h-4" /> },
+     { id: 'set-password', label: 'Change Password', icon: <RiLockPasswordLine className="w-4 h-4" /> },
   ];
 
   return (
