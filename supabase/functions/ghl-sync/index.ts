@@ -1019,17 +1019,25 @@ async function findAuthUserByEmail({ supabaseUrl, supabaseServiceKey, email, req
     throw parseError;
   }
 
-  const users = Array.isArray(payload?.users)
+  const candidates = Array.isArray(payload?.users)
     ? payload.users
     : Array.isArray(payload)
       ? payload
-      : [];
+      : payload && typeof payload === 'object'
+        ? [payload]
+        : [];
 
   const user =
-    users.find((candidate) => {
+    candidates.find((candidate) => {
       const candidateEmail = normalizeEmail(candidate?.email);
       return candidateEmail === normalizedEmail;
-    }) || users[0] || null;
+    }) || null;
+
+  if (!user) {
+    console.log(
+      `[${requestId}][findAuthUserByEmail] No exact match found in admin lookup response (candidates=${candidates.length})`
+    );
+  }
 
   return { user, normalizedEmail };
 }
