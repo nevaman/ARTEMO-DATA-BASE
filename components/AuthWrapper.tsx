@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import { isSupabaseAvailable } from '../lib/supabase';
 import { LoginForm } from './LoginForm';
 import { SignupForm } from './SignupForm';
@@ -15,6 +16,12 @@ export const AuthWrapper: React.FC<AuthWrapperProps> = ({ children }) => {
   });
   const [isSignup, setIsSignup] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
+  const location = useLocation();
+  const isInviteFlow = location.pathname === '/set-password';
+
+  if (isInviteFlow) {
+    return <>{children}</>;
+  }
 
   if (isInitializing || sessionStatus === 'loading' || sessionStatus === 'refreshing') {
     return (
