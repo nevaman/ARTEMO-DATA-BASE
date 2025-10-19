@@ -1,9 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, FormEvent } from 'react';
 import { useAuthStore } from '../stores/authStore';
-import { AuthService } from '../services/auth';
 import { useNotifications } from '../contexts/NotificationContext';
-import { ArrowLeftIcon, SettingsIcon, UserIcon, BellIcon, EyeIcon, EyeOffIcon, BriefcaseIcon } from './Icons';
-import { ClientProfilesSettings } from './ClientProfilesSettings';
+import { ArrowLeftIcon, SettingsIcon, UserIcon, BellIcon, EyeIcon, LockIcon } from './Icons';
+import { supabase } from '../lib/supabase'; // Assuming supabase client is exported from here
+
+const MIN_PASSWORD_LENGTH = 8;
 
 interface SettingsViewProps {
   onBack: () => void;
@@ -25,18 +26,20 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onBack }) => {
   const [notificationSettings, setNotificationSettings] = useState({
     emailUpdates: true,
     toolRecommendations: true,
-    weeklyDigest: false,
-    marketingEmails: false,
   });
 
   // Privacy settings
   const [privacy, setPrivacy] = useState({
-    profileVisibility: 'private',
     shareUsageData: false,
     allowAnalytics: true,
   });
 
-  const authService = AuthService.getInstance();
+  // Password settings
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [passwordErrorMessage, setPasswordErrorMessage] = useState<string | null>(null);
+  const [isUpdatingPassword, setIsUpdatingPassword] = useState(false);
 
   const handleSaveProfile = async () => {
     setIsLoading(true);
@@ -64,7 +67,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onBack }) => {
       updateProfile({
         preferences: {
           ...profile?.preferences,
-          notifications,
+          notifications: notificationSettings,
         },
       });
       
@@ -96,11 +99,50 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onBack }) => {
     }
   };
 
+  const handleUpdatePassword = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+
+    if (password.length < MIN_PASSWORD_LENGTH) {
+      setPasswordErrorMessage(`Password must be at least ${MIN_PASSWORD_LENGTH} characters long.`);
+      return;
+    }
+
+    if (password !== confirmPassword) {
+      setPasswordErrorMessage('Passwords do not match. Please confirm your new password.');
+      return;
+    }
+
+    setIsUpdatingPassword(true);
+    setPasswordErrorMessage(null);
+
+    try {
+      const { error } = await supabase.auth.updateUser({ password });
+      if (error) {
+        throw error;
+      }
+      notifications.success('Your password has been updated successfully.', 'Password Saved');
+      setPassword('');
+      setConfirmPassword('');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'We could not update your password. Please try again.';
+      notifications.error(message, 'Password update failed');
+      setPasswordErrorMessage(message);
+    } finally {
+      setIsUpdatingPassword(false);
+    }
+  };
+
   const tabs = [
     { id: 'profile', label: 'Profile', icon: <UserIcon className="w-4 h-4" /> },
     { id: 'notifications', label: 'Notifications', icon: <BellIcon className="w-4 h-4" /> },
     { id: 'privacy', label: 'Privacy', icon: <EyeIcon className="w-4 h-4" /> },
+    { id: 'set-password', label: 'Change Password', icon: <LockIcon className="w-4 h-4" /> },
   ];
+  
+  const passwordTooShort = password.length > 0 && password.length < MIN_PASSWORD_LENGTH;
+  const passwordsMismatch = confirmPassword.length > 0 && password !== confirmPassword;
+  const canSubmitPassword = !isUpdatingPassword && !passwordTooShort && !passwordsMismatch && password.length >= MIN_PASSWORD_LENGTH;
+
 
   return (
     <div className="p-4 lg:p-6 max-w-4xl mx-auto w-full">
@@ -295,7 +337,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onBack }) => {
                           Share Usage Data
                         </h4>
                         <p className="text-sm text-light-text-tertiary dark:text-dark-text-tertiary">
-                          Help improve Artemo by sharing anonymous usage statistics
+                          Help improve our service by sharing anonymous usage statistics
                         </p>
                       </div>
                       <label className="relative inline-flex items-center cursor-pointer">
@@ -341,6 +383,84 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onBack }) => {
                       {isLoading ? 'Saving...' : 'Save Settings'}
                     </button>
                   </div>
+                </div>
+              </div>
+            )}
+            
+            {activeTab === 'set-password' && (
+              <div className="space-y-6">
+                <div>
+                  <h3 className="text-lg font-semibold text-light-text-primary dark:text-dark-text-primary mb-4">
+                    Change Password
+                  </h3>
+                  <form onSubmit={handleUpdatePassword} className="space-y-5">
+                    <div className="space-y-1">
+                      <label htmlFor="password" className="block text-sm font-medium text-light-text-primary dark:text-dark-text-primary">
+                        New password
+                      </label>
+                      <div className="relative">
+                        <input
+                          id="password"
+                          type={showPassword ? 'text' : 'password'}
+                          value={password}
+                          onChange={(event) => setPassword(event.target.value)}
+                          className="w-full p-3 border border-light-border dark:border-dark-border rounded-md bg-light-bg-component dark:bg-dark-bg-component text-light-text-primary dark:text-dark-text-primary focus:ring-2 focus:ring-primary-accent focus:border-primary-accent outline-none"
+                          placeholder="Create a strong password"
+                          disabled={isUpdatingPassword}
+                          minLength={MIN_PASSWORD_LENGTH}
+                          autoComplete="new-password"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowPassword((current) => !current)}
+                          className="absolute inset-y-0 right-3 flex items-center text-sm text-light-text-secondary dark:text-dark-text-secondary hover:text-light-text-primary dark:hover:text-dark-text-primary"
+                        >
+                          {showPassword ? 'Hide' : 'Show'}
+                        </button>
+                      </div>
+                      {passwordTooShort && (
+                        <p className="text-xs text-red-600 dark:text-red-300">Password must be at least {MIN_PASSWORD_LENGTH} characters long.</p>
+                      )}
+                    </div>
+
+                    <div className="space-y-1">
+                      <label htmlFor="confirm-password" className="block text-sm font-medium text-light-text-primary dark:text-dark-text-primary">
+                        Confirm password
+                      </label>
+                      <input
+                        id="confirm-password"
+                        type={showPassword ? 'text' : 'password'}
+                        value={confirmPassword}
+                        onChange={(event) => setConfirmPassword(event.target.value)}
+                        className="w-full p-3 border border-light-border dark:border-dark-border rounded-md bg-light-bg-component dark:bg-dark-bg-component text-light-text-primary dark:text-dark-text-primary focus:ring-2 focus:ring-primary-accent focus:border-primary-accent outline-none"
+                        placeholder="Re-enter your password"
+                        disabled={isUpdatingPassword}
+                        autoComplete="new-password"
+                      />
+                      {passwordsMismatch && (
+                        <p className="text-xs text-red-600 dark:text-red-300">Passwords do not match.</p>
+                      )}
+                    </div>
+
+                    {passwordErrorMessage && (
+                      <div className="p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-md">
+                        <p className="text-sm text-red-800 dark:text-red-200">{passwordErrorMessage}</p>
+                      </div>
+                    )}
+
+                    <div className="flex justify-end">
+                      <button
+                        type="submit"
+                        disabled={!canSubmitPassword}
+                        className="px-6 py-2 bg-primary-accent text-text-on-accent rounded-md hover:opacity-85 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                      >
+                         {isUpdatingPassword && (
+                           <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-text-on-accent"></div>
+                         )}
+                         {isUpdatingPassword ? 'Saving...' : 'Save Password'}
+                      </button>
+                    </div>
+                  </form>
                 </div>
               </div>
             )}

@@ -702,7 +702,9 @@ export class AuthService {
       }
 
       // Handle auth state changes
-      if (event === 'SIGNED_IN' && session?.user) {
+      const isSignInEvent = event === 'SIGNED_IN' || event === 'INITIAL_SESSION';
+
+      if (isSignInEvent && session?.user) {
         console.log('🔧 AUTH DIAGNOSTIC: User signed in, setting auth state');
         
         // Set auth state immediately

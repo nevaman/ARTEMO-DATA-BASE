@@ -39,13 +39,13 @@ if (!isSupabaseConfigured) {
 }
 
 // Only create client if properly configured - prevent any network calls
-export const supabase = isSupabaseConfigured 
+export const supabase = isSupabaseConfigured
   ? createClient(supabaseUrl!, supabaseAnonKey!, {
       auth: {
         autoRefreshToken: true,
         persistSession: true,
         detectSessionInUrl: true,
-        flowType: 'pkce',
+        flowType: 'implicit',
         storageKey: 'artemo-auth-token',
         debug: true,
         storage: {

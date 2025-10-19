@@ -21,6 +21,7 @@ import { ChatDetailPage } from './pages/ChatDetailPage';
 import { HistoryPage } from './pages/HistoryPage';
 import { ClientProfilesPage } from './pages/ClientProfilesPage';
 import { SettingsPage } from './pages/SettingsPage';
+import { SetPasswordPage } from './pages/SetPasswordPage';
 
 // Admin Pages
 import { AdminDashboardPage } from './pages/AdminDashboardPage';
@@ -68,6 +69,7 @@ const App: React.FC = () => {
         <AuthManager>
           <ProUpgradeModal />
           <Routes>
+            <Route path="/set-password" element={<SetPasswordPage />} />
             {/* User Routes with Shared Layout */}
             <Route path="/" element={
               <ProtectedRoute>
