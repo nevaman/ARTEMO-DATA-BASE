@@ -7,6 +7,7 @@ import { Sidebar } from '../components/Sidebar';
 import { NewProjectModal } from '../components/NewProjectModal';
 import { ToolActivationModal } from '../components/ToolActivationModal';
 import { ChatSearchModal } from '../components/ChatSearchModal';
+import { ProUpgradeModal } from '../components/ProUpgradeModal';
 import { MainContent } from '../components/MainContent';
 import { useCategories } from '../hooks/useCategories';
 import { useProjects } from '../hooks/useProjects';
@@ -131,27 +132,44 @@ const RenameModal: React.FC = () => {
 };
 
 export const AppLayout: React.FC = () => {
-  const { 
-    isSidebarOpen, 
-    toggleSidebar, 
-    isModalOpen, 
-    closeModal, 
-    toolForActivation, 
+  const {
+    isSidebarOpen,
+    toggleSidebar,
+    isModalOpen,
+    closeModal,
+    toolForActivation,
     setToolForActivation,
     isChatSearchOpen,
-    closeChatSearch
+    closeChatSearch,
+    setShowProUpgradeModal
   } = useUIStore();
   const { categories } = useCategories();
   const { projects, createProject } = useProjects();
   const { chatHistory } = useChatHistory();
-  const { profile } = useAuthStore();
+  const { profile, isPro, isAdmin } = useAuthStore();
   const navigate = useNavigate();
 
   const handleInitiateToolActivation = (tool: DynamicTool) => {
-    setToolForActivation(tool);
+    const isProTool = tool.is_pro;
+    const canAccess = !isProTool || isPro || isAdmin;
+
+    if (canAccess) {
+      setToolForActivation(tool);
+    } else {
+      setShowProUpgradeModal(true);
+    }
   };
 
   const handleStartToolSession = (tool: DynamicTool) => {
+    const isProTool = tool.is_pro;
+    const canAccess = !isProTool || isPro || isAdmin;
+
+    if (!canAccess) {
+      setShowProUpgradeModal(true);
+      setToolForActivation(null);
+      return;
+    }
+
     navigate(`/tools/${tool.id}`);
     setToolForActivation(null);
   };
@@ -226,7 +244,7 @@ export const AppLayout: React.FC = () => {
       />
       
       <RenameModal />
-      
+
       <ChatSearchModal
         isOpen={isChatSearchOpen}
         onClose={closeChatSearch}
@@ -239,6 +257,8 @@ export const AppLayout: React.FC = () => {
           closeChatSearch();
         }}
       />
+
+      <ProUpgradeModal />
     </>
   );
 };

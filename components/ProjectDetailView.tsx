@@ -104,6 +104,8 @@ const ToolRecommendationModal: React.FC<{
   const [provenance, setProvenance] = useState('');
   const vectorService = VectorSearchService.getInstance();
   const textareaRef = React.useRef<HTMLTextAreaElement>(null);
+  const { isPro, isAdmin, setActiveClientProfileId } = useAuthStore();
+  const { setShowProUpgradeModal } = useUIStore();
 
   React.useEffect(() => {
     if (textareaRef.current) {
@@ -113,21 +115,30 @@ const ToolRecommendationModal: React.FC<{
   }, [prompt]);
 
   const handleUseRecommendedTool = () => {
+    if (!recommendedTool) return;
+
+    const isProTool = recommendedTool.is_pro;
+    const canAccess = !isProTool || isPro || isAdmin;
+
+    if (!canAccess) {
+      setShowProUpgradeModal(true);
+      return;
+    }
+
     // Store project context for automatic association
     sessionStorage.setItem('activeProjectId', projectId);
     if (project.clientProfileSnapshot) {
       sessionStorage.setItem('activeClientProfile', JSON.stringify(project.clientProfileSnapshot));
-      
+
       // Also immediately update the global store
-      const { setActiveClientProfileId } = useAuthStore.getState();
       setActiveClientProfileId(project.clientProfileSnapshot.id);
     }
-    
+
     // Dispatch event to trigger tool activation
     window.dispatchEvent(new CustomEvent('recommendedToolSelected', {
       detail: { tool: recommendedTool, projectId }
     }));
-    
+
     sessionStorage.setItem('selectedProjectId', projectId);
     onClose();
   };

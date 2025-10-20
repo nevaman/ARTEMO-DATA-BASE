@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import type { DynamicTool } from '../types';
 import { useTools } from '../hooks/useTools';
 import { useUIStore } from '../stores/uiStore';
+import { useAuthStore } from '../stores/authStore';
 import { VectorSearchService, type SimilarTool } from '../services/vectorSearchService';
 import { ToolCard } from './ToolCard';
 import { SendIcon, XIcon } from './Icons';
@@ -23,9 +24,10 @@ export const DashboardView: React.FC<DashboardViewProps> = () => {
     const [recommendationSource, setRecommendationSource] = useState<'local' | 'supabase' | null>(null);
     const [provenance, setProvenance] = useState('');
     const { tools, featuredTools, loading, error, dataSource } = useTools();
-    const { setToolForActivation } = useUIStore();
+    const { setToolForActivation, setShowProUpgradeModal } = useUIStore();
+    const { isPro, isAdmin } = useAuthStore();
     const textareaRef = useRef<HTMLTextAreaElement>(null);
-    const resultsRef = useRef<HTMLDivElement>(null); // ✨ STEP 1: CREATE BOOKMARK
+    const resultsRef = useRef<HTMLDivElement>(null);
     const vectorService = VectorSearchService.getInstance();
     const datasetLabel = dataSource === 'supabase' ? 'Supabase catalogue' : 'Local static catalogue';
 
@@ -237,7 +239,16 @@ export const DashboardView: React.FC<DashboardViewProps> = () => {
                                                         {recommendedTool.description}
                                                     </p>
                                                     <button
-                                                        onClick={() => setToolForActivation(recommendedTool)}
+                                                        onClick={() => {
+                                                            const isProTool = recommendedTool.is_pro;
+                                                            const canAccess = !isProTool || isPro || isAdmin;
+
+                                                            if (canAccess) {
+                                                                setToolForActivation(recommendedTool);
+                                                            } else {
+                                                                setShowProUpgradeModal(true);
+                                                            }
+                                                        }}
                                                         className="w-full px-4 py-2 bg-primary-accent text-text-on-accent rounded-md hover:opacity-85 transition-opacity font-medium"
                                                     >
                                                         Use This Tool

@@ -1,6 +1,8 @@
 
 import React, { useState } from 'react';
 import { useCategories } from '../hooks/useCategories';
+import { useAuthStore } from '../stores/authStore';
+import { useUIStore } from '../stores/uiStore';
 import type { DynamicTool } from '../types';
 import * as Icons from './Icons';
 
@@ -14,8 +16,13 @@ interface ToolActivationModalProps {
 export const ToolActivationModal: React.FC<ToolActivationModalProps> = ({ tool, onClose, onStart, onSetDontShowAgain }) => {
     const [dontShowAgain, setDontShowAgain] = useState(false);
     const { categories } = useCategories();
+    const { isPro, isAdmin } = useAuthStore();
+    const { setShowProUpgradeModal } = useUIStore();
 
     if (!tool) return null;
+
+    const isProTool = tool.is_pro;
+    const canAccess = !isProTool || isPro || isAdmin;
 
     // Get dynamic icon from category data
     const getCategoryIcon = () => {
@@ -42,6 +49,12 @@ export const ToolActivationModal: React.FC<ToolActivationModalProps> = ({ tool, 
     const Icon = getCategoryIcon();
 
     const handleStartClick = () => {
+        if (!canAccess) {
+            onClose();
+            setShowProUpgradeModal(true);
+            return;
+        }
+
         if (dontShowAgain) {
             onSetDontShowAgain(tool.id, true);
         }
@@ -54,7 +67,11 @@ export const ToolActivationModal: React.FC<ToolActivationModalProps> = ({ tool, 
             onClick={onClose}
         >
             <div
-                className="bg-light-bg-component dark:bg-dark-bg-component rounded-lg shadow-2xl w-full max-w-2xl transition-transform transform scale-100 animate-[scaleUp_0.2s_ease-out] text-center"
+                className={`rounded-lg shadow-2xl w-full max-w-2xl transition-transform transform scale-100 animate-[scaleUp_0.2s_ease-out] text-center ${
+                    isProTool
+                    ? 'bg-gradient-to-br from-purple-50 via-fuchsia-50 to-indigo-50 dark:from-gray-900 dark:via-purple-900/40 dark:to-gray-900 border-2 border-purple-200 dark:border-purple-600/30'
+                    : 'bg-light-bg-component dark:bg-dark-bg-component'
+                }`}
                 onClick={e => e.stopPropagation()}
             >
                 <div className="p-8 lg:p-12">
@@ -68,6 +85,9 @@ export const ToolActivationModal: React.FC<ToolActivationModalProps> = ({ tool, 
                             )}
                             {tool.featured && (
                                 <span className="text-yellow-600 dark:text-yellow-400">• Featured</span>
+                            )}
+                            {isProTool && (
+                                <span className="text-xs font-bold tracking-wider uppercase bg-gradient-to-r from-fuchsia-500 to-purple-600 text-white py-1 px-2.5 rounded-full shadow-md">• Pro</span>
                             )}
                         </div>
                     </div>
