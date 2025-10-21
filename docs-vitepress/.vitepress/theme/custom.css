@@ -1,0 +1,207 @@
+/**
+ * Artemo AI Brand Customization
+ * Aligned with production UI design system
+ */
+
+:root {
+  /* Brand Colors - Artemo UI */
+  --vp-c-brand-1: #008F6B;
+  --vp-c-brand-2: #00B386;
+  --vp-c-brand-3: #008F6B;
+  --vp-c-brand-soft: rgba(0, 143, 107, 0.14);
+
+  /* Typography - Match Artemo UI */
+  --vp-font-family-base: 'Inter', ui-sans-serif, system-ui, sans-serif;
+  --vp-font-family-mono: ui-monospace, 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, monospace;
+
+  /* Custom Accent */
+  --artemo-primary: #008F6B;
+  --artemo-primary-light: #00B386;
+  --artemo-primary-dark: #006B52;
+  --artemo-text-on-accent: #FFFFFF;
+
+  /* Semantic Typography */
+  --vp-font-family-heading: 'Merriweather', Georgia, serif;
+}
+
+.dark {
+  --vp-c-brand-1: #00B386;
+  --vp-c-brand-2: #00D9A3;
+  --vp-c-brand-3: #00B386;
+  --vp-c-brand-soft: rgba(0, 179, 134, 0.16);
+}
+
+/* Custom Heading Styles - Use serif for emphasis like production UI */
+.vp-doc h1,
+.vp-doc h2,
+.vp-doc h3 {
+  font-family: var(--vp-font-family-heading);
+  font-weight: 700;
+}
+
+/* Hero Section Styling */
+.VPHome .name {
+  font-family: var(--vp-font-family-heading);
+  background: linear-gradient(120deg, var(--artemo-primary) 0%, var(--artemo-primary-light) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Custom Callout Styles */
+.vp-doc .custom-block.tip {
+  border-color: var(--artemo-primary);
+}
+
+.vp-doc .custom-block.tip .custom-block-title {
+  color: var(--artemo-primary);
+}
+
+/* Button Customization */
+.VPButton.brand {
+  background-color: var(--artemo-primary);
+  border-color: var(--artemo-primary);
+  color: var(--artemo-text-on-accent);
+}
+
+.VPButton.brand:hover {
+  background-color: var(--artemo-primary-dark);
+  border-color: var(--artemo-primary-dark);
+}
+
+/* Navigation Bar Enhancements */
+.VPNavBar {
+  backdrop-filter: blur(12px);
+}
+
+/* Sidebar Polish */
+.VPSidebar {
+  padding-top: 24px;
+}
+
+/* Code Block Styling */
+.vp-doc [class*='language-'] {
+  border-radius: 8px;
+}
+
+/* Link Styling */
+.vp-doc a {
+  color: var(--artemo-primary);
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.vp-doc a:hover {
+  color: var(--artemo-primary-light);
+  text-decoration: underline;
+}
+
+/* Custom Badge Styles */
+.vp-doc .custom-block.pro {
+  border-left-color: #9333EA;
+  background-color: rgba(147, 51, 234, 0.1);
+}
+
+.vp-doc .custom-block.pro .custom-block-title {
+  color: #9333EA;
+  font-weight: 600;
+}
+
+/* Screenshot Placeholder Styling */
+.screenshot-placeholder {
+  background: linear-gradient(135deg, #f5f5f5 0%, #e5e5e5 100%);
+  border: 2px dashed #d1d5db;
+  border-radius: 8px;
+  padding: 48px;
+  text-align: center;
+  color: #6b7280;
+  font-style: italic;
+  margin: 24px 0;
+}
+
+.dark .screenshot-placeholder {
+  background: linear-gradient(135deg, #1f2937 0%, #111827 100%);
+  border-color: #374151;
+  color: #9ca3af;
+}
+
+/* Quick Start Card Styling */
+.quick-start-card {
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 24px;
+  margin: 16px 0;
+  background: linear-gradient(135deg, #ffffff 0%, #f9fafb 100%);
+  transition: all 0.3s ease;
+}
+
+.quick-start-card:hover {
+  border-color: var(--artemo-primary);
+  box-shadow: 0 4px 12px rgba(0, 143, 107, 0.1);
+  transform: translateY(-2px);
+}
+
+.dark .quick-start-card {
+  background: linear-gradient(135deg, #1f2937 0%, #111827 100%);
+  border-color: #374151;
+}
+
+.dark .quick-start-card:hover {
+  border-color: var(--artemo-primary-light);
+  box-shadow: 0 4px 12px rgba(0, 179, 134, 0.2);
+}
+
+/* Step-by-Step Guide Styling */
+.step-guide {
+  counter-reset: step-counter;
+  list-style: none;
+  padding-left: 0;
+}
+
+.step-guide > li {
+  counter-increment: step-counter;
+  position: relative;
+  padding-left: 48px;
+  margin-bottom: 32px;
+}
+
+.step-guide > li::before {
+  content: counter(step-counter);
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 32px;
+  height: 32px;
+  background: var(--artemo-primary);
+  color: white;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 14px;
+}
+
+/* Responsive Improvements */
+@media (max-width: 768px) {
+  .vp-doc h1 {
+    font-size: 32px;
+  }
+
+  .quick-start-card {
+    padding: 16px;
+  }
+}
+
+/* Print Styles */
+@media print {
+  .VPNav,
+  .VPSidebar,
+  .VPFooter {
+    display: none;
+  }
+
+  .VPContent {
+    padding: 0;
+  }
+}
