@@ -22,6 +22,7 @@ import { HistoryPage } from './pages/HistoryPage';
 import { ClientProfilesPage } from './pages/ClientProfilesPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { SetPasswordPage } from './pages/SetPasswordPage';
+import { KnowledgeBasePage } from './pages/KnowledgeBasePage';
 
 // Admin Pages
 import { AdminDashboardPage } from './pages/AdminDashboardPage';
@@ -85,6 +86,7 @@ const App: React.FC = () => {
               <Route path="history" element={<HistoryPage />} />
               <Route path="profiles" element={<ClientProfilesPage />} />
               <Route path="settings" element={<SettingsPage />} />
+              <Route path="knowledge_base" element={<KnowledgeBasePage />} />
             </Route>
 
             {/* Admin Routes with Admin Layout */}

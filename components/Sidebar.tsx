@@ -99,7 +99,7 @@ const UserMenu: React.FC = () => {
     };
 
     const handleGetHelp = () => {
-        window.open('https://www.skool.com/artemo-user-group-3561', '_blank');
+        navigate('/knowledge_base');
         setIsOpen(false);
     };
 
