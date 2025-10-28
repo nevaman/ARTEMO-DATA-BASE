@@ -64,11 +64,52 @@ class EdgeLogger {
   }
 }
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-correlation-id',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
-};
+const allowedStaticHosts = new Set([
+  'https.bolt.new',
+  'https.stackblitz.com',
+  'main.artemo.ai',
+  'artemo.vercel.app',
+]);
+
+const dynamicOriginPatterns = [
+  /\.local-credentialless\.webcontainer-api\.io$/,
+  /\.w-credentialless-staticblitz\.com$/,
+];
+
+function resolveAllowedOrigin(originHeader: string | null): string | null {
+  if (!originHeader) {
+    return null;
+  }
+
+  try {
+    const originUrl = new URL(originHeader);
+    if (originUrl.protocol !== 'https:') {
+      return null;
+    }
+
+    if (allowedStaticHosts.has(originUrl.host)) {
+      return originUrl.origin;
+    }
+
+    if (dynamicOriginPatterns.some((pattern) => pattern.test(originUrl.host))) {
+      return originUrl.origin;
+    }
+  } catch (_error) {
+    return null;
+  }
+
+  return null;
+}
+
+function createCorsHeaders(originHeader: string | null) {
+  const allowedOrigin = resolveAllowedOrigin(originHeader);
+
+  return {
+    'Access-Control-Allow-Origin': allowedOrigin ?? 'null',
+    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-correlation-id',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  };
+}
 
 function createErrorResponse(
   message: string,
@@ -80,8 +121,9 @@ function createErrorResponse(
   return { message, code, details, timestamp: new Date().toISOString(), correlationId, component: 'ai-chat-function', severity };
 }
 
-function respondWithError(error: ErrorResponse, statusCode: number = 500, correlationId?: string): Response {
+function respondWithError(error: ErrorResponse, statusCode: number = 500, correlationId?: string, originHeader?: string | null): Response {
   EdgeLogger.error(error, correlationId);
+  const corsHeaders = createCorsHeaders(originHeader ?? null);
   return new Response(JSON.stringify({ error }), { status: statusCode, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 }
 
@@ -211,6 +253,9 @@ function getAIErrorCode(error: any): string {
 
 serve(async (req: Request) => {
     const correlationId = req.headers.get('x-correlation-id') || crypto.randomUUID();
+    const originHeader = req.headers.get('origin');
+    const corsHeaders = createCorsHeaders(originHeader);
+
     if (req.method === 'OPTIONS') {
         return new Response('ok', { headers: corsHeaders });
     }
@@ -226,8 +271,8 @@ serve(async (req: Request) => {
             knowledgeBaseId: knowledgeBaseId,
         });
 
-        if (!toolId) return respondWithError(createErrorResponse('Tool ID is required', 'MISSING_TOOL_ID', undefined, 'warn', correlationId), 400);
-        if (!messages || !Array.isArray(messages)) return respondWithError(createErrorResponse('Messages array is required', 'INVALID_MESSAGES', undefined, 'warn', correlationId), 400);
+        if (!toolId) return respondWithError(createErrorResponse('Tool ID is required', 'MISSING_TOOL_ID', undefined, 'warn', correlationId), 400, correlationId, originHeader);
+        if (!messages || !Array.isArray(messages)) return respondWithError(createErrorResponse('Messages array is required', 'INVALID_MESSAGES', undefined, 'warn', correlationId), 400, correlationId, originHeader);
         
         const supabase = createClient(Deno.env.get('SUPABASE_URL') ?? '', Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '');
 
@@ -238,7 +283,7 @@ serve(async (req: Request) => {
             .single();
 
         if (toolError || !toolConfig) {
-            return respondWithError(createErrorResponse('Tool not found or inactive', 'TOOL_NOT_FOUND', toolError?.message, 'warn', correlationId), 404);
+            return respondWithError(createErrorResponse('Tool not found or inactive', 'TOOL_NOT_FOUND', toolError?.message, 'warn', correlationId), 404, correlationId, originHeader);
         }
         
         const aiResponse = await callAIWithFallback(
@@ -277,6 +322,6 @@ serve(async (req: Request) => {
         );
 
     } catch (error: any) {
-        return respondWithError(createErrorResponse('Failed to process AI chat request', 'AI_CHAT_PROCESSING_ERROR', error.message, 'error', correlationId), 500);
+        return respondWithError(createErrorResponse('Failed to process AI chat request', 'AI_CHAT_PROCESSING_ERROR', error.message, 'error', correlationId), 500, correlationId, originHeader);
     }
 });

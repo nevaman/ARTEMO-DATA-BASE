@@ -1,11 +1,52 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
-};
+const allowedStaticHosts = new Set([
+  'https.bolt.new',
+  'https.stackblitz.com',
+  'main.artemo.ai',
+  'artemo.vercel.app',
+]);
+
+const dynamicOriginPatterns = [
+  /\.local-credentialless\.webcontainer-api\.io$/,
+  /\.w-credentialless-staticblitz\.com$/,
+];
+
+function resolveAllowedOrigin(originHeader: string | null): string | null {
+  if (!originHeader) {
+    return null;
+  }
+
+  try {
+    const originUrl = new URL(originHeader);
+    if (originUrl.protocol !== 'https:') {
+      return null;
+    }
+
+    if (allowedStaticHosts.has(originUrl.host)) {
+      return originUrl.origin;
+    }
+
+    if (dynamicOriginPatterns.some((pattern) => pattern.test(originUrl.host))) {
+      return originUrl.origin;
+    }
+  } catch (_error) {
+    return null;
+  }
+
+  return null;
+}
+
+function createCorsHeaders(originHeader: string | null) {
+  const allowedOrigin = resolveAllowedOrigin(originHeader);
+
+  return {
+    'Access-Control-Allow-Origin': allowedOrigin ?? 'null',
+    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  };
+}
 
 interface EmbeddingRequest {
   toolId?: string;
@@ -41,6 +82,9 @@ async function generateEmbedding(text: string): Promise<number[]> {
 }
 
 serve(async (req: Request) => {
+  const originHeader = req.headers.get('origin');
+  const corsHeaders = createCorsHeaders(originHeader);
+
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
   }
@@ -91,10 +135,10 @@ serve(async (req: Request) => {
       if (upsertError) {
         console.error('Failed to upsert tool embedding:', upsertError);
         return new Response(
-          JSON.stringify({ 
-            success: false, 
+          JSON.stringify({
+            success: false,
             error: 'Failed to store tool embedding',
-            details: upsertError.message 
+            details: upsertError.message
           }),
           { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
@@ -127,8 +171,8 @@ serve(async (req: Request) => {
       if (vectorSearchError) {
         console.error('Vector search RPC failed:', vectorSearchError);
         return new Response(
-          JSON.stringify({ 
-            success: false, 
+          JSON.stringify({
+            success: false,
             error: 'Vector search failed',
             details: vectorSearchError.message,
             similarTools: [] // Return empty array instead of failing
@@ -138,10 +182,10 @@ serve(async (req: Request) => {
       }
 
       return new Response(
-        JSON.stringify({ 
-          success: true, 
+        JSON.stringify({
+          success: true,
           similarTools: similarTools || [],
-          embedding: embedding 
+          embedding: embedding
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
@@ -155,9 +199,9 @@ serve(async (req: Request) => {
   } catch (error: any) {
     console.error('Embedding generation error:', error);
     return new Response(
-      JSON.stringify({ 
+      JSON.stringify({
         error: 'Failed to process embedding request',
-        details: error.message 
+        details: error.message
       }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );

@@ -1,11 +1,52 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
  
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
-};
+const allowedStaticHosts = new Set([
+  'https.bolt.new',
+  'https.stackblitz.com',
+  'main.artemo.ai',
+  'artemo.vercel.app',
+]);
+
+const dynamicOriginPatterns = [
+  /\.local-credentialless\.webcontainer-api\.io$/,
+  /\.w-credentialless-staticblitz\.com$/,
+];
+
+function resolveAllowedOrigin(originHeader: string | null): string | null {
+  if (!originHeader) {
+    return null;
+  }
+
+  try {
+    const originUrl = new URL(originHeader);
+    if (originUrl.protocol !== 'https:') {
+      return null;
+    }
+
+    if (allowedStaticHosts.has(originUrl.host)) {
+      return originUrl.origin;
+    }
+
+    if (dynamicOriginPatterns.some((pattern) => pattern.test(originUrl.host))) {
+      return originUrl.origin;
+    }
+  } catch (_error) {
+    return null;
+  }
+
+  return null;
+}
+
+function createCorsHeaders(originHeader: string | null) {
+  const allowedOrigin = resolveAllowedOrigin(originHeader);
+
+  return {
+    'Access-Control-Allow-Origin': allowedOrigin ?? 'null',
+    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  };
+}
 
 interface InviteUserRequest {
   email: string;
@@ -15,6 +56,8 @@ interface InviteUserRequest {
 
 serve(async (req: Request) => {
   console.log('Admin invite user function called:', req.method);
+  const originHeader = req.headers.get('origin');
+  const corsHeaders = createCorsHeaders(originHeader);
 
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
