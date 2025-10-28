@@ -1,10 +1,65 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS'
-};
+const allowedStaticHosts = new Set([
+  'https.bolt.new',
+  'https.stackblitz.com',
+  'main.artemo.ai',
+  'artemo.vercel.app',
+  'web.postman.co',
+  'go.postman.co',
+  'app.getpostman.com',
+  'app.gohighlevel.com',
+  'www.gohighlevel.com',
+]);
+
+const dynamicOriginPatterns = [
+  /\.local-credentialless\.webcontainer-api\.io$/,
+  /\.w-credentialless-staticblitz\.com$/,
+  /(^|\.)postman\.com$/,
+  /(^|\.)postman\.co$/,
+  /(^|\.)getpostman\.com$/,
+  /(^|\.)gohighlevel\.com$/,
+  /(^|\.)highlevel\.com$/,
+  /(^|\.)hl\.co$/,
+  /(^|\.)leadconnectorhq\.com$/,
+  /(^|\.)leadconnectorapp\.com$/,
+  /(^|\.)myleadconnector\.com$/,
+];
+
+function resolveAllowedOrigin(originHeader: string | null): string | null {
+  if (!originHeader) {
+    return null;
+  }
+
+  try {
+    const originUrl = new URL(originHeader);
+    if (originUrl.protocol !== 'https:') {
+      return null;
+    }
+
+    if (allowedStaticHosts.has(originUrl.host)) {
+      return originUrl.origin;
+    }
+
+    if (dynamicOriginPatterns.some((pattern) => pattern.test(originUrl.host))) {
+      return originUrl.origin;
+    }
+  } catch (_error) {
+    return null;
+  }
+
+  return null;
+}
+
+function createCorsHeaders(originHeader: string | null) {
+  const allowedOrigin = resolveAllowedOrigin(originHeader);
+
+  return {
+    'Access-Control-Allow-Origin': allowedOrigin ?? '*',
+    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS'
+  };
+}
 
 const ROLE_PRIORITY = {
   user: 1,
@@ -15,6 +70,8 @@ const ROLE_PRIORITY = {
 Deno.serve(async (req) => {
   const requestId = crypto.randomUUID();
   const startTime = Date.now();
+  const originHeader = req.headers.get('origin');
+  const corsHeaders = createCorsHeaders(originHeader);
 
   try {
     console.log(`[${requestId}] ========== NEW REQUEST ==========`);
@@ -23,12 +80,12 @@ Deno.serve(async (req) => {
 
     if (req.method === 'OPTIONS') {
       console.log(`[${requestId}] Handling OPTIONS request`);
-      return jsonResponse({ success: true }, 200);
+      return jsonResponse({ success: true }, 200, corsHeaders);
     }
 
     if (req.method !== 'POST') {
       console.warn(`[${requestId}] Method not allowed: ${req.method}`);
-      return jsonResponse({ error: 'Method not allowed' }, 405);
+      return jsonResponse({ error: 'Method not allowed' }, 405, corsHeaders);
     }
 
     // SECURITY: Simple secret key check via URL parameter
@@ -38,12 +95,12 @@ Deno.serve(async (req) => {
 
     if (!expectedSecret) {
       console.error(`[${requestId}] WEBHOOK_SECRET not configured in environment`);
-      return jsonResponse({ error: 'Server configuration error' }, 500);
+      return jsonResponse({ error: 'Server configuration error' }, 500, corsHeaders);
     }
 
     if (providedSecret !== expectedSecret) {
       console.warn(`[${requestId}] Unauthorized: Invalid or missing secret parameter`);
-      return jsonResponse({ error: 'Unauthorized', message: 'Invalid or missing secret' }, 401);
+      return jsonResponse({ error: 'Unauthorized', message: 'Invalid or missing secret' }, 401, corsHeaders);
     }
 
     console.log(`[${requestId}] ✓ Secret validated successfully`);
@@ -54,7 +111,7 @@ Deno.serve(async (req) => {
 
     if (!supabaseUrl || !supabaseServiceKey) {
       console.error(`[${requestId}] Missing required Supabase environment variables`);
-      return jsonResponse({ error: 'Server configuration error' }, 500);
+      return jsonResponse({ error: 'Server configuration error' }, 500, corsHeaders);
     }
 
     // Read request body
@@ -64,7 +121,7 @@ Deno.serve(async (req) => {
       console.log(`[${requestId}] Raw body length: ${rawBody.length} bytes`);
     } catch (err) {
       console.error(`[${requestId}] Failed to read request body:`, err);
-      return jsonResponse({ error: 'Bad request body', details: String(err) }, 400);
+      return jsonResponse({ error: 'Bad request body', details: String(err) }, 400, corsHeaders);
     }
 
     // Parse JSON payload
@@ -74,7 +131,7 @@ Deno.serve(async (req) => {
       console.log(`[${requestId}] Parsed JSON payload successfully`);
     } catch (err) {
       console.error(`[${requestId}] Invalid JSON payload:`, err);
-      return jsonResponse({ error: 'Invalid JSON payload' }, 400);
+      return jsonResponse({ error: 'Invalid JSON payload' }, 400, corsHeaders);
     }
 
     console.log(`[${requestId}] Full payload:`, JSON.stringify(payload, null, 2));
@@ -103,7 +160,7 @@ Deno.serve(async (req) => {
         message: 'Webhook ignored: contact email is required',
         eventId,
         requestId
-      }, 202);
+      }, 202, corsHeaders);
     }
 
     // Create Supabase client
@@ -166,7 +223,7 @@ Deno.serve(async (req) => {
         reason: action.reason,
         eventId,
         requestId
-      });
+      }, 200, corsHeaders);
     }
 
     // Execute the determined action
@@ -262,7 +319,7 @@ Deno.serve(async (req) => {
         result,
         eventId,
         requestId
-      });
+      }, 200, corsHeaders);
 
     } catch (error) {
       console.error(`[${requestId}] ✗ Failed processing webhook action:`, {
@@ -277,7 +334,7 @@ Deno.serve(async (req) => {
         message: error.message,
         eventId,
         requestId
-      }, 500);
+      }, 500, corsHeaders);
     }
 
   } catch (error) {
@@ -290,7 +347,7 @@ Deno.serve(async (req) => {
       error: 'Internal server error',
       message: error.message,
       requestId
-    }, 500);
+    }, 500, corsHeaders);
   } finally {
     const duration = Date.now() - startTime;
     console.log(`[${requestId}] Request completed in ${duration}ms`);
@@ -1082,11 +1139,12 @@ function isDuplicateUserError(error) {
   return message.includes('already registered') || message.includes('duplicate');
 }
 
-function jsonResponse(obj, status = 200) {
+function jsonResponse(obj, status = 200, corsHeadersOverride?: Record<string, string>) {
+  const headers = corsHeadersOverride ?? createCorsHeaders(null);
   return new Response(JSON.stringify(obj), {
     status,
     headers: {
-      ...corsHeaders,
+      ...headers,
       'Content-Type': 'application/json'
     }
   });
